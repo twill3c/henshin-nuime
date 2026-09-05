@@ -19,7 +19,7 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from pipeline import ingest  # noqa: E402
+from pipeline import ingest, sentences  # noqa: E402
 
 SPEC = ROOT / "SPEC.md"
 TEST_SPEC = ROOT / "TEST_SPEC.md"
@@ -31,8 +31,14 @@ QUOTE_PAIRS = {
 }
 
 
-def _table_rows(md: str, header_cell: str) -> list[list[str]]:
-    """`header_cell` を最初の列見出しに持つ表の本体行を返す。"""
+def _table_rows(md: str, *header_cells: str) -> list[list[str]]:
+    """指定した列見出しで**始まる**表の本体行を返す。
+
+    先頭 1 列だけで表を特定すると、同じ見出しの別の表を巻き込む —— SPEC には
+    「版」で始まる表が三つある(段落の実測・文の実測・規則の寄与)。
+    見出しは呼び出し側が必要なだけ並べて特定する。
+    """
+    n = len(header_cells)
     rows: list[list[str]] = []
     in_table = False
     for line in md.splitlines():
@@ -40,7 +46,7 @@ def _table_rows(md: str, header_cell: str) -> list[list[str]]:
             in_table = False
             continue
         cells = [c.strip() for c in line.strip().strip("|").split("|")]
-        if cells and cells[0] == header_cell:
+        if tuple(cells[:n]) == header_cells:
             in_table = True
             continue
         if in_table:
@@ -50,10 +56,23 @@ def _table_rows(md: str, header_cell: str) -> list[list[str]]:
     return rows
 
 
+def _gates_referenced_by_cases() -> set[str]:
+    """TEST_SPEC の**ケース表から**参照されているゲート ID。
+
+    前書きでの言及は参照と見なさない —— 散文で `G-08` と書いただけのゲートを
+    「守られている」と数えると、この検査は骨抜きになる。
+    """
+    referenced: set[str] = set()
+    for cells in _table_rows(TEST_SPEC.read_text(encoding="utf-8"), "ID", "対応要求"):
+        if re.fullmatch(r"T-\d+", cells[0]):
+            referenced |= set(re.findall(r"G-\d+", " ".join(cells)))
+    return referenced
+
+
 @pytest.mark.validation
 def test_t013_spec_measurements_match_live_scan():
     """T-013 — SPEC §3 の実測表が、いま走査して出た値と一致する。"""
-    rows = _table_rows(SPEC.read_text(encoding="utf-8"), "版")
+    rows = _table_rows(SPEC.read_text(encoding="utf-8"), "版", "段落")
     assert rows, "SPEC §3 の実測表が見つからない"
 
     editions = ingest.load_all()
@@ -87,10 +106,46 @@ def test_t013_spec_measurements_match_live_scan():
 
 
 @pytest.mark.validation
+def test_t022_spec_sentence_table_matches_live_scan():
+    """T-022 — SPEC §3.1 の文の実測表と規則の寄与表が、いま走査した値と一致する。"""
+    spec = SPEC.read_text(encoding="utf-8")
+    editions = ingest.load_all()
+
+    rows = _table_rows(spec, "版", "文")
+    assert rows, "SPEC §3.1 の文の実測表が見つからない"
+    seen = set()
+    for cells in rows:
+        eid = cells[0].strip("`")
+        assert eid in editions, f"未知の版: {eid}"
+        seen.add(eid)
+        sents = sentences.sentences_for(editions[eid])
+        assert int(cells[1].replace(",", "")) == len(sents), f"{eid} 文の総数"
+        assert [int(x) for x in re.findall(r"\d+", cells[2])] == \
+            sentences.chapter_counts(sents), f"{eid} 章別文数"
+        per_para = len(sents) / len(editions[eid].paragraphs)
+        assert abs(float(cells[3]) - per_para) < 0.005, f"{eid} 段落あたり"
+    assert seen == set(editions), f"覆っていない版: {set(editions) - seen}"
+
+    rows = _table_rows(spec, "版", "規則")
+    assert rows, "SPEC §3.1 の規則の寄与表が見つからない"
+    label = {"独": "de_pg22367", "英": "en_pg5200", "日": "ja_aozora49866"}
+    seen = set()
+    for cells in rows:
+        eid = label[cells[0]]
+        seen.add(eid)
+        ed = editions[eid]
+        without = sentences.count_for(ed, rules=False)
+        with_rules = sentences.count_for(ed, rules=True)
+        assert int(cells[2]) == without, f"{eid} 規則を外したときの文数"
+        assert int(cells[3]) == without - with_rules, f"{eid} 増分"
+    assert seen == set(editions), f"覆っていない版: {set(editions) - seen}"
+
+
+@pytest.mark.validation
 def test_t014_every_gate_is_tested_or_declared_unimplemented():
     """T-014 — SPEC §7 の各 G-xx はテストから参照されるか「未実装」と明記される。"""
     spec = SPEC.read_text(encoding="utf-8")
-    gate_rows = _table_rows(spec, "ID")
+    gate_rows = _table_rows(spec, "ID", "ゲート")
     gates = {}
     for cells in gate_rows:
         m = re.fullmatch(r"G-\d+", cells[0])
@@ -99,13 +154,7 @@ def test_t014_every_gate_is_tested_or_declared_unimplemented():
         gates[cells[0]] = cells[-1]
     assert gates, "SPEC §7 の品質ゲート表が見つからない"
 
-    referenced = set(re.findall(r"G-\d+", TEST_SPEC.read_text(encoding="utf-8")))
-    # ケース表の外(前書き)での言及は参照と見なさない
-    case_rows = _table_rows(TEST_SPEC.read_text(encoding="utf-8"), "ID")
-    referenced = set()
-    for cells in case_rows:
-        if re.fullmatch(r"T-\d+", cells[0]):
-            referenced |= set(re.findall(r"G-\d+", " ".join(cells)))
+    referenced = _gates_referenced_by_cases()
 
     unguarded = [
         g for g, status in gates.items()
@@ -129,10 +178,6 @@ def test_t014_every_gate_is_tested_or_declared_unimplemented():
 def test_t014_referenced_gates_exist_in_spec():
     """TEST_SPEC が実在しないゲートを参照していないこと(逆向きの検査)。"""
     spec_gates = set(re.findall(r"G-\d+", SPEC.read_text(encoding="utf-8")))
-    case_rows = _table_rows(TEST_SPEC.read_text(encoding="utf-8"), "ID")
-    referenced = set()
-    for cells in case_rows:
-        if re.fullmatch(r"T-\d+", cells[0]):
-            referenced |= set(re.findall(r"G-\d+", " ".join(cells)))
+    referenced = _gates_referenced_by_cases()
     assert referenced, "ケース表がゲートを一つも参照していない"
     assert referenced <= spec_gates, f"SPEC に無いゲートを参照: {referenced - spec_gates}"

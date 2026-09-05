@@ -4,8 +4,9 @@ __pycache__/
 .venv/
 venv/
 
-# 生成物 — data/raw から pipeline/ingest.py で作り直せる
+# 生成物 — data/raw から pipeline/ で作り直せる
 data/editions/
+data/sentences/
 
 # 公開面(L6 以降)
 node_modules/

@@ -28,8 +28,10 @@ def _run(*args: str) -> subprocess.CompletedProcess:
 ENTRYPOINTS = [
     ("-m", "pipeline.ingest"),
     ("-m", "pipeline.rights"),
+    ("-m", "pipeline.sentences"),
     ("pipeline/ingest.py",),
     ("pipeline/rights.py",),
+    ("pipeline/sentences.py",),
 ]
 
 

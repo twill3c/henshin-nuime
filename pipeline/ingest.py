@@ -61,16 +61,39 @@ def chapter_counts(paragraphs: list[Paragraph]) -> list[int]:
     return counts
 
 
+# 畳んでよい空白は ASCII の空白・タブ・改行と、行送りに使う制御空白だけ。
+# **全角空白 U+3000 は畳まない** —— 青空文庫の本文は感嘆符・疑問符の後に
+# 全角アキを置く組版で、実測 28 箇所ある(2026-09-05)。`\s` はこれにも当たるので、
+# `re.sub(r"\s+", " ")` は日本語の組版を黙って書き換えていた。1 対 1 の置換なので
+# 字数も件数も動かず、どの集計にも現れなかった(HC-174)。
+_FOLDABLE_SPACE = re.compile("[ \t\r\n\f\v   ]+")
+
+
 def normalize(text: str) -> str:
     """行内改行を潰し、Unicode 正規化する。字面の書き換えはここでは行わない。
 
     引用符・ダッシュの字種は版ごとの事実なので保存する。
     正規化で潰すと、独 »« と英 "" の対応という構造オラクルが消える。
+    全角空白も同じ理由で保存する(上のコメント)。
     """
     text = unicodedata.normalize("NFC", text)
     text = text.replace(" ", " ")
-    text = re.sub(r"\s+", " ", text)
+    text = _FOLDABLE_SPACE.sub(" ", text)
     return text.strip()
+
+
+def char_diff(before: str, after: str) -> dict[str, int]:
+    """符号位置ごとの増減。正なら増えた、負なら減った(G-16 / HC-174)。
+
+    **1 対 1 の置換は、件数も長さもハッシュ以外のあらゆる集計量も動かさない。**
+    だから正規化を検査するときは、保存されるはずの量ではなく
+    「何が何に変わったか」を見る。
+    """
+    from collections import Counter
+
+    b, a = Counter(before), Counter(after)
+    keys = set(b) | set(a)
+    return {k: a[k] - b[k] for k in keys if a[k] != b[k]}
 
 
 # --- Project Gutenberg -------------------------------------------------------
