@@ -29,10 +29,17 @@ ENTRYPOINTS = [
     ("-m", "pipeline.ingest"),
     ("-m", "pipeline.rights"),
     ("-m", "pipeline.sentences"),
+    ("-m", "pipeline.evaluate"),
     ("pipeline/ingest.py",),
     ("pipeline/rights.py",),
     ("pipeline/sentences.py",),
+    ("pipeline/evaluate.py",),
 ]
+
+# `pipeline/align.py` は本文を読む口を持たないので起動経路が無い(G-03)。
+# 「入口が無いこと」自体を固定しておかないと、後から誰かが main を足したときに
+# 段落を知る型への経路が静かに開く。
+NO_ENTRYPOINT = ["pipeline/align.py"]
 
 
 @pytest.mark.validation
@@ -45,6 +52,14 @@ def test_t015_cli_entrypoints_run(args):
         f"--- stdout ---\n{proc.stdout}\n--- stderr ---\n{proc.stderr}"
     )
     assert proc.stdout.strip(), f"{' '.join(args)} が何も出力していない"
+
+
+@pytest.mark.validation
+@pytest.mark.parametrize("path", NO_ENTRYPOINT)
+def test_t030_modules_without_entrypoint_stay_that_way(path):
+    """T-030 — 入口を持たないと決めたモジュールに入口が生えていないこと。"""
+    source = (ROOT / path).read_text(encoding="utf-8")
+    assert '__main__' not in source, f"{path} に起動経路が生えている(G-03)"
 
 
 @pytest.mark.validation

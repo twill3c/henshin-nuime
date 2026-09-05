@@ -7,32 +7,38 @@
 
 ## いま何ができているか
 
-L1 まで。三版の取り込みと権利台帳、段落と文への分割、構造の実測が済んでいる。
-公開面・学習・アラインメントはまだ無い。
+L2 まで。三版の取り込みと権利台帳、段落と文への分割、そして**長さだけを手がかりにした
+縫い目**が引けている。埋め込みと学習はまだ無い。
 
 ## 使い方
 
+**インタプリタはこのプロジェクトの `.venv` を使う**(裸の `python` は別プロジェクトの
+venv に解決される — 下の注意を読むこと)。
+
 ```bash
-python -m pipeline.ingest     # data/raw → data/editions/*.json(章 → 段落)
-python -m pipeline.sentences  # data/sentences/*.json(段落 → 文)
-python -m pipeline.rights     # 権利台帳の検査(不備があれば終了コード 1)
-python -m pytest -q           # 検査一式
-python harness/text_hygiene.py    # 字種衛生
+.venv/Scripts/python.exe -m pipeline.ingest     # data/raw → 章 → 段落
+.venv/Scripts/python.exe -m pipeline.sentences  # 段落 → 文
+.venv/Scripts/python.exe -m pipeline.rights     # 権利台帳の検査
+.venv/Scripts/python.exe -m pipeline.evaluate   # 縫い目を引いて段落オラクルで測る(約 40 秒)
+.venv/Scripts/python.exe -m pytest -q           # 検査一式(約 90 秒)
+.venv/Scripts/python.exe harness/text_hygiene.py
 ```
+
+`pipeline/align.py` に起動経路は無い。本文を読む口を持たせると、段落を知っている型への
+経路ができてしまうため(G-03)。
 
 `python pipeline/ingest.py` のようなスクリプトパス起動も通る(T-015 が両方を確かめる)。
 
 ### 実行環境の注意(HC-171)
 
-この Windows 機のシェルは `VIRTUAL_ENV` が**別プロジェクトの venv** を指したまま起動する。
-L0 は標準ライブラリだけなので影響しないが、**依存を一つでも入れる前に**
-プロジェクト専用の venv を用意すること。確認は次の一行:
+この Windows 機のシェルは `VIRTUAL_ENV` が**別プロジェクトの venv**
+(`c:\_ClaudeCode\juchu-desk\.venv`)を指したまま起動する。裸の `python` はそちらに
+解決されるので、**このプロジェクトでは必ず `.venv/Scripts/python.exe` を打つ**。
+確認は次の一行で、`C:\_ClaudeCode\henshin-nuime\.venv` が出れば正しい:
 
 ```bash
-python -c "import sys; print(sys.prefix)"
+.venv/Scripts/python.exe -c "import sys; print(sys.prefix)"
 ```
-
-これがこのプロジェクトの配下でもシステム Python でもなければ、そのまま `pip install` してはいけない。
 
 ## 素材と権利
 
@@ -83,6 +89,28 @@ Project Gutenberg のヘッダ・フッタと許諾表示は取り込み時に�
 - **正規化が日本語の全角空白を潰していた**(L0 の欠陥)。青空文庫は感嘆符・疑問符の後に
   全角アキを置く組版で、実測 28 箇所。1 対 1 の置換なので字数も件数も動かず、
   L0 の検査は全部緑のまま通っていた(HC-174)。いまは置換の差分そのものを検査している。
+
+## L2 で分かったこと
+
+長さだけを手がかりに縫い目を引いた(Gale & Church 1993 の長さモデル)。
+アライナには**文の本文しか渡していない** —— 段落も章も識別子も渡していないので、
+段落オラクルでの評価は held-out である。
+
+| 組 | 手法 | 段落一致率 | 細分の破れ |
+|---|---|---|---|
+| 独→英 | 長さモデル | **0.9949** | 3/97 |
+| 独→英 | 対角線(対照) | 0.5577 | 64/97 |
+| 独→日 | 長さモデル | — | 56/165 |
+| 独→日 | 対角線(対照) | — | 57/165 |
+
+- **独↔英は長さだけで縫える。** 文字数以外に何も見ていないのに、段落一致率 0.9949。
+  位置だけの対角線は 0.5577 なので、これは対照との差として読める。
+- **独↔日では長さは効かない。** 破れが 56 対 57 で、対角線とほぼ区別がつかない。
+  表記体系をまたぐと文字数は対応の手がかりにならない。
+  **これが L3 で埋め込みを持ち込む理由を、仮定ではなく実測で与えている。**
+- パラメータの出所を分けてある。伸縮率 `c` は本文の総字数比だけから出す(対応を使わない)。
+  分散 `s²` は Gale & Church の公表値 6.8 を**この corpus に当てはめ直さずに**使う。
+  当てはめるには対応が要り、対応こそが測りたいものだからである。
 
 ## ライセンス
 
