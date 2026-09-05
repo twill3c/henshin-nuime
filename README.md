@@ -27,6 +27,26 @@ venv に解決される — 下の注意を読むこと)。
 `pipeline/align.py` に起動経路は無い。本文を読む口を持たせると、段落を知っている型への
 経路ができてしまうため(G-03)。
 
+### モデルの入手(約 940 MB・git に入れていない)
+
+埋め込みには `paraphrase-multilingual-MiniLM-L12-v2` を使う。**同じ重みを二つの形式で**
+落とす —— 一方は onnxruntime に、もう一方は自前の NumPy 順伝播に食わせ、
+突き合わせる(G-04)。
+
+```bash
+mkdir -p models/paraphrase-multilingual-MiniLM-L12-v2
+cd models/paraphrase-multilingual-MiniLM-L12-v2
+H=https://huggingface.co
+X=$H/Xenova/paraphrase-multilingual-MiniLM-L12-v2/resolve/main
+S=$H/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2/resolve/main
+curl -sSL -o tokenizer.json  $X/tokenizer.json
+curl -sSL -o config.json     $X/config.json
+curl -sSL -o model.onnx      $X/onnx/model.onnx          # 470 MB(経路A)
+curl -sSL -o model.safetensors $S/model.safetensors      # 470 MB(経路B)
+```
+
+モデルが手元に無いと、二実装照合の検査は skip される(理由つき)。他の検査は通る。
+
 `python pipeline/ingest.py` のようなスクリプトパス起動も通る(T-015 が両方を確かめる)。
 
 ### 実行環境の注意(HC-171)
@@ -111,6 +131,27 @@ Project Gutenberg のヘッダ・フッタと許諾表示は取り込み時に�
 - パラメータの出所を分けてある。伸縮率 `c` は本文の総字数比だけから出す(対応を使わない)。
   分散 `s²` は Gale & Church の公表値 6.8 を**この corpus に当てはめ直さずに**使う。
   当てはめるには対応が要り、対応こそが測りたいものだからである。
+
+## L3 で分かったこと
+
+**同じ重みを二つの経路で走らせて突き合わせた**(G-04)。経路 A は onnxruntime、
+経路 B は**このプロジェクトが NumPy で素から書いた BERT の順伝播**
+(safetensors の読み取り・multi-head attention・LayerNorm・厳密 gelu まで自前。
+`nn.Transformer` の類は使っていない)。
+
+| 比べたもの | 最大差 |
+|---|---|
+| 経路A × 経路B(トークン単位・最終層) | 4.768e-06 |
+| 同・平均プーリング後 | 4.545e-07(cos 最小 0.99999976) |
+| **陽性対照**: 経路B の重みを 1 要素 +0.05 | 9.156e-04 |
+
+比べているのはプール後の 384 次元ではなく**トークンごとの最終層出力**。
+平均で打ち消し合う経路の食い違いも見えるようにしてある。
+
+**切り詰めの表を一度測り違えた。** `tokenizer.json` には truncation(128)と padding が
+焼かれており、読み込んだだけのトークナイザで長さを測ると**全系列が 128 に揃う**。
+そこから「128 を超えたものは 0 件」というもっともらしい嘘が出て、検査は全部緑のまま
+manifest に焼かれかけた。測り直した実態は、独 2.2%(トークンの 1.68%)・英 0.9%・日 0.3%。
 
 ## ライセンス
 

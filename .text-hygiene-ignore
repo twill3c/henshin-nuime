@@ -1,0 +1,13 @@
+# 字種検査から外す経路(部分一致)。
+#
+# models/ は HuggingFace から落とした配布物だけを置く場所で、このプロジェクトが
+# 書いた文章は一つも無い(2026-09-06 実測: config.json / modules.json /
+# pooling_config.json / tokenizer.json / tokenizer_config.json / model.onnx /
+# model.safetensors の 7 件、いずれも取得したまま)。
+#
+# tokenizer.json は多言語モデルの語彙表なので、キリル文字もハングルも**設計どおり**
+# 含まれている。除外しないと 17 MB の語彙表がまるごと違反として出る。
+#
+# **除外を足すときは、外した先に自作の文章が無いことを確かめてから書く。**
+# ここに手で書いたファイルを置くようになったら、この行を見直すこと。
+models/

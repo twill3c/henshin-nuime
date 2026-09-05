@@ -30,11 +30,19 @@ ENTRYPOINTS = [
     ("-m", "pipeline.rights"),
     ("-m", "pipeline.sentences"),
     ("-m", "pipeline.evaluate"),
+    # 全文の埋め込みは 16 分かかるので、起動経路の確認は軽い方を通す。
+    # 検査に 16 分かかる工程を入れると、その検査は回されなくなる。
+    ("-m", "pipeline.embed", "--stats"),
     ("pipeline/ingest.py",),
     ("pipeline/rights.py",),
     ("pipeline/sentences.py",),
     ("pipeline/evaluate.py",),
+    ("pipeline/embed.py", "--stats"),
 ]
+
+# モデルを要する起動経路は、手元にモデルが無ければ飛ばす(約 940 MB で git に入れていない)
+NEEDS_MODEL = {"pipeline.embed", "pipeline/embed.py"}
+MODEL_FILES = ("tokenizer.json",)
 
 # `pipeline/align.py` は本文を読む口を持たないので起動経路が無い(G-03)。
 # 「入口が無いこと」自体を固定しておかないと、後から誰かが main を足したときに
@@ -45,7 +53,13 @@ NO_ENTRYPOINT = ["pipeline/align.py"]
 @pytest.mark.validation
 @pytest.mark.parametrize("args", ENTRYPOINTS, ids=lambda a: " ".join(a))
 def test_t015_cli_entrypoints_run(args):
-    """T-015 — 起動経路が終了コード 0 で完走する。"""
+    """T-015 / T-036 — 起動経路が終了コード 0 で完走する。"""
+    if set(args) & NEEDS_MODEL:
+        missing = [f for f in MODEL_FILES
+                   if not (ROOT / "models" / "paraphrase-multilingual-MiniLM-L12-v2"
+                           / f).exists()]
+        if missing:
+            pytest.skip(f"モデル {missing} が手元に無い(README の入手手順を見ること)")
     proc = _run(*args)
     assert proc.returncode == 0, (
         f"{' '.join(args)} が終了コード {proc.returncode}\n"

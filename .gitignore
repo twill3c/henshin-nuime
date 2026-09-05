@@ -7,6 +7,12 @@ venv/
 # 生成物 — data/raw から pipeline/ で作り直せる
 data/editions/
 data/sentences/
+data/embeddings/
+
+# 事前学習モデル(約 940 MB)。入手手順は README に書く
+models/*/model.onnx
+models/*/model.safetensors
+models/*/tokenizer.json
 
 # 公開面(L6 以降)
 node_modules/
