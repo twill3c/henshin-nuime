@@ -1,0 +1,79 @@
+{
+ "note": "本文三版の権利根拠と表示義務の台帳。公開面の出典表示はこのファイルを正本とする。値は 2026-09-05 に出典へ当たって実測した。",
+ "checked": "2026-09-05",
+ "editions": [
+  {
+   "edition_id": "de_pg22367",
+   "lang": "de",
+   "title": "Die Verwandlung",
+   "author": "Franz Kafka",
+   "translator": null,
+   "source_name": "Project Gutenberg",
+   "source_url": "https://www.gutenberg.org/ebooks/22367",
+   "retrieved": "2026-09-05",
+   "basis": "フランツ・カフカ 1883-07-03〜1924-06-03。没後100年を超え、日本・米国・独語圏いずれでも著作権は消滅している。底本は Kurt Wolff Verlag, Leipzig 1915(奥付の表示は 1917)。",
+   "terms_url": "https://www.gutenberg.org/policy/license.html",
+   "attribution": [
+    "Franz Kafka, Die Verwandlung (Kurt Wolff Verlag, Leipzig)",
+    "電子化: Project Gutenberg eBook #22367",
+    "Produced by Jana Srna, Alexander Bauer and the Online Distributed Proofreading Team"
+   ],
+   "obligations": [
+    "PG のヘッダ・フッタと許諾表示を本文から除去したうえで再配布する(pipeline/ingest.py strip_pg_wrapper)",
+    "「Project Gutenberg」の名称は出典表示としてのみ用い、本プロジェクトへの関与や承認を示唆しない"
+   ]
+  },
+  {
+   "edition_id": "en_pg5200",
+   "lang": "en",
+   "title": "Metamorphosis",
+   "author": "Franz Kafka",
+   "translator": "David Wyllie",
+   "source_name": "Project Gutenberg",
+   "source_url": "https://www.gutenberg.org/ebooks/5200",
+   "retrieved": "2026-09-05",
+   "basis": "David Wyllie による英訳。Project Gutenberg が公有として配布している(eBook #5200、初出 2005-08-17)。",
+   "terms_url": "https://www.gutenberg.org/policy/license.html",
+   "attribution": [
+    "Franz Kafka, Metamorphosis, translated by David Wyllie",
+    "電子化: Project Gutenberg eBook #5200"
+   ],
+   "obligations": [
+    "PG のヘッダ・フッタと許諾表示を本文から除去したうえで再配布する(pipeline/ingest.py strip_pg_wrapper)",
+    "訳者名 David Wyllie を本文の表示に必ず添える",
+    "「Project Gutenberg」の名称は出典表示としてのみ用いる"
+   ]
+  },
+  {
+   "edition_id": "ja_aozora49866",
+   "lang": "ja",
+   "title": "変身",
+   "author": "フランツ・カフカ",
+   "translator": "原田義人",
+   "source_name": "青空文庫",
+   "source_url": "https://www.aozora.gr.jp/cards/001235/card49866.html",
+   "retrieved": "2026-09-05",
+   "basis": "訳者 原田義人 1918-08-05〜1960-08-01。旧著作権法の死後50年により 2010-12-31 をもって著作権消滅。2018-12-30 の保護期間70年への延長は、その時点で既に消滅した権利を復活させない。青空文庫は本作を著作権の切れた作品として公開しており、図書カードに著作権存続の表示・特別の許諾表示はない(2026-09-05 確認)。",
+   "terms_url": "https://www.aozora.gr.jp/guide/kijyunn.html",
+   "base_text": "世界文学大系58　カフカ",
+   "publisher": "筑摩書房",
+   "first_published": "1960（昭和35）年4月10日発行",
+   "input_by": "kompass",
+   "proofread_by": "青空文庫",
+   "created": "2010年11月28日",
+   "revised": "2016年2月22日",
+   "attribution": [
+    "フランツ・カフカ「変身」原田義人訳",
+    "底本: 「世界文学大系58　カフカ」筑摩書房、1960（昭和35）年4月10日発行",
+    "入力: kompass / 校正: 青空文庫",
+    "2010年11月28日作成 / 2016年2月22日修正",
+    "青空文庫（https://www.aozora.gr.jp/）"
+   ],
+   "obligations": [
+    "青空文庫収録ファイルの取り扱い規準に従い、作品名・著者名・翻訳者名・底本・入力者・校正者・作成日/修正日の情報を削除せず公開面に表示する",
+    "ルビ(振仮名)を本文から外すという変更を加えているので、その作業履歴を明記する",
+    "「青空文庫」の名称は出所表示として用い、青空文庫の関与や認知・許可を示すものではないと明示する"
+   ]
+  }
+ ]
+}
