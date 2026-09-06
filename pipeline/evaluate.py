@@ -26,10 +26,10 @@ from pathlib import Path
 from typing import Sequence
 
 if __package__:
-    from . import align, embed, ingest, sentences
+    from . import align, embed, ingest, sentences, stats
 else:  # スクリプトとして直接起動されたとき(HC-174)
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-    from pipeline import align, embed, ingest, sentences
+    from pipeline import align, embed, ingest, sentences, stats
 
 
 def paragraph_ordinals(sents: Sequence[sentences.Sentence]) -> list[int]:
@@ -206,11 +206,100 @@ def run(*, with_embeddings: bool = True) -> dict[tuple[str, str], dict[str, obje
                                         dst_subset=common_dst_p)
             row[n]["refinement_violations_common"] = ref.violations
             row[n]["refinement_paragraphs_common"] = ref.paragraphs
+
+        row["tests"] = _significance(row, names, sents[a], sents[b],
+                                     common_src, common_dst_p)
         out[(a, b)] = row
     return out
 
 
+def _significance(row: dict, names: list[str],
+                  src: Sequence[sentences.Sentence],
+                  dst: Sequence[sentences.Sentence],
+                  common_src: set[int],
+                  common_dst_p: set[int]) -> dict[str, object]:
+    """埋め込みと他の手法との差を、対応のある置換検定に掛ける。
+
+    **単位も並べ替えのブロックも、結果を見てから選んでいない。**
+    段落一致率は「文を単位・段落をブロック」— どちらも本文の構造から決まる。
+    細分の破れは「段落を単位」で、ブロックの大きさだけは構造から決まらないので
+    複数の値を並べる(`REFINEMENT_BLOCK_SIZES`)。
+    """
+    if "embedding" not in names:
+        return {}
+    tests: dict[str, object] = {}
+    po_src = paragraph_ordinals(src)
+
+    # 段落一致率(独↔英でのみ定義できる)
+    if row["embedding"]["paragraph_agreement"] is not None:
+        units = sorted(common_src)
+        blocks = [po_src[i] for i in units]
+        base = sentence_agreement_outcomes(row["embedding"]["beads"], src, dst,
+                                           common_src)
+        for other in [n for n in names if n != "embedding"]:
+            comp = sentence_agreement_outcomes(row[other]["beads"], src, dst,
+                                               common_src)
+            r = stats.paired_permutation([base[i] for i in units],
+                                         [comp[i] for i in units], blocks)
+            tests[f"agreement_vs_{other}"] = r
+
+    # 細分の破れ(全組)
+    units_p = sorted(common_dst_p)
+    base_r = refinement_outcomes(row["embedding"]["beads"], src, dst, common_dst_p)
+    for other in [n for n in names if n != "embedding"]:
+        comp_r = refinement_outcomes(row[other]["beads"], src, dst, common_dst_p)
+        for size in REFINEMENT_BLOCK_SIZES:
+            blocks = [k // size for k in range(len(units_p))]
+            r = stats.paired_permutation([base_r[p] for p in units_p],
+                                         [comp_r[p] for p in units_p], blocks)
+            tests[f"refinement_vs_{other}_block{size}"] = r
+    return tests
+
+
 METHODS = ("gale_church", "diagonal", "embedding")
+
+# 細分の破れを検定するときの並べ替えブロックの大きさ。**一つに決めない。**
+# 隣り合う段落は同じ誤りに巻き込まれるので、1 段落ずつ入れ替えると相関を壊して
+# p 値が甘くなる。かといってブロックの大きさは構造から決まらないので、
+# 複数の値で出して結果が幅に対して頑健かを見る。
+REFINEMENT_BLOCK_SIZES = (1, 5, 10)
+
+
+def sentence_agreement_outcomes(
+    beads: Sequence[align.Bead],
+    src: Sequence[sentences.Sentence],
+    dst: Sequence[sentences.Sentence],
+    subset: set[int],
+) -> dict[int, float]:
+    """src 文ごとに「その文の対応が全部正しい段落に落ちたか」を 1/0 で返す。
+
+    対応そのものを単位にすると、同じ文から出た複数の対応が独立でないまま
+    数に入る。文を単位にして、その中は「全部正しいか」に畳む。
+    """
+    po_src = paragraph_ordinals(src)
+    po_dst = paragraph_ordinals(dst)
+    hits: dict[int, list[bool]] = {i: [] for i in subset}
+    for i, j in align.links(beads):
+        if i in hits:
+            hits[i].append(po_src[i] == po_dst[j])
+    return {i: (1.0 if v and all(v) else 0.0) for i, v in hits.items()}
+
+
+def refinement_outcomes(
+    beads: Sequence[align.Bead],
+    src: Sequence[sentences.Sentence],
+    dst: Sequence[sentences.Sentence],
+    subset: set[int],
+) -> dict[int, float]:
+    """dst 段落ごとに「破れていないか」を 1/0 で返す。"""
+    po_src = paragraph_ordinals(src)
+    po_dst = paragraph_ordinals(dst)
+    spans: dict[int, set[int]] = {p: set() for p in subset}
+    for i, j in align.links(beads):
+        p = po_dst[j]
+        if p in spans:
+            spans[p].add(po_src[i])
+    return {p: (1.0 if len(v) <= 1 else 0.0) for p, v in spans.items()}
 
 
 def main() -> None:
@@ -236,6 +325,9 @@ def main() -> None:
         print(f"    (共通部分 = 全手法が対応をつけた src 文 "
               f"{row['common_src_sentences']} 件 / dst 段落 "
               f"{row['common_dst_paragraphs']} 件)")
+        for name, r in row.get("tests", {}).items():
+            print(f"    置換検定 {name:34s} 差 {r.observed:+.4f}  "
+                  f"p {r.p_display}  ブロック {r.blocks}")
 
 
 if __name__ == "__main__":

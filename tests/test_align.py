@@ -396,3 +396,84 @@ def test_t029_common_subset_table_matches_live_scan(results):
             else:
                 assert int(nums[0]) == e["refinement_violations_common"], cells[0]
     assert seen == set(LABELS.values()), "共通部分の表が全ての組を覆っていない"
+
+
+# --- T-047 / T-048: 置換検定 --------------------------------------------------
+
+
+@pytest.mark.validation
+def test_t047_all_block_sizes_are_reported(results):
+    """T-047(G-20)— ブロック幅を一つに畳まず、全ての幅について p を返す。
+
+    幅は本文の構造から決まらないので、どれか一つを選ぶと**選び方が結果を作る**。
+    全部出して、幅に対して頑健かどうかを読み手が見られるようにする。
+    """
+    for pair, row in results.items():
+        tests = row.get("tests")
+        assert tests, f"{pair} に検定結果が無い"
+        for other in ("gale_church", "diagonal"):
+            for size in evaluate.REFINEMENT_BLOCK_SIZES:
+                key = f"refinement_vs_{other}_block{size}"
+                assert key in tests, f"{pair} に {key} が無い"
+                r = tests[key]
+                assert 0.0 < r.p_value <= 1.0
+                assert r.blocks > 0
+    # 幅の集合が実際に複数あること —— 1 通りしか無ければこの検査は何も言わない
+    assert len(set(evaluate.REFINEMENT_BLOCK_SIZES)) >= 3
+
+
+@pytest.mark.validation
+def test_t048_spec_significance_table_matches_live_scan(results):
+    """T-048 — SPEC §3.5 の検定表が、いま走らせた検定と一致する(HC-152)。
+
+    p は乱数を使うが種を固定してあるので再現する。`< 0.0001` の行は
+    「Monte Carlo の分解能を下回る」ことだけを確かめる —— そこは数値ではなく
+    「これ以上細かくは分からない」という表明だからである。
+    """
+    import re
+
+    rows = _spec_table("組", "比較", "差", "p")
+    assert rows, "SPEC §3.5 の検定表が見つからない"
+
+    floor = 1.0 / (10000 + 1)
+    seen: set[tuple[tuple[str, str], str]] = set()
+    for cells in rows:
+        pair = LABELS[cells[0]]
+        row = results[pair]
+        label, diff_s, p_s = cells[1], cells[2], cells[3]
+
+        other = "diagonal" if "diagonal" in label else "gale_church"
+        if label.startswith("一致率"):
+            keys = [f"agreement_vs_{other}"]
+        else:
+            keys = [f"refinement_vs_{other}_block{s}"
+                    for s in evaluate.REFINEMENT_BLOCK_SIZES]
+        seen.add((pair, label))
+
+        want_diff = float(diff_s.replace("+", ""))
+        for k in keys:
+            r = row["tests"][k]
+            assert abs(r.observed - want_diff) < 5e-5, f"{cells[0]} {label} の差"
+
+        got_p = [row["tests"][k].p_value for k in keys]
+        # p 欄は三通り: 「0.245」/「< 0.0001(三通りとも)」/
+        # 「< 0.0001 / < 0.0001 / 0.0020」。スラッシュ区切りが無ければ
+        # 一つの表明が全てのブロック幅に掛かる。
+        cleaned = re.sub(r"(三通りとも|[()()])", "", p_s.replace("**", "")).strip()
+        parts = [x.strip() for x in cleaned.split("/") if x.strip()]
+        if len(parts) == 1:
+            parts = parts * len(got_p)
+        assert len(parts) == len(got_p), f"{cells[0]} {label}: p の個数が違う"
+        for part, p in zip(parts, got_p):
+            if part.startswith("<"):
+                assert p <= floor, f"{cells[0]} {label}: {p:.6f} が分解能を上回る"
+            else:
+                # **文書が書いた桁数を超える精度を要求しない**(HC-016)。
+                # 0.251 と 3 桁で書いてあるなら、許容差は 0.5e-3 である。
+                decimals = len(part.split(".")[1]) if "." in part else 0
+                tol = 0.5 * 10 ** -decimals
+                assert abs(float(part) - p) <= tol, (
+                    f"{cells[0]} {label}: 文書 {part} 対 実測 {p:.6f}"
+                )
+
+    assert len(seen) == len(rows), "同じ行が二度数えられている"
