@@ -26,10 +26,10 @@ from pathlib import Path
 from typing import Sequence
 
 if __package__:
-    from . import align, ingest, sentences
+    from . import align, embed, ingest, sentences
 else:  # スクリプトとして直接起動されたとき(HC-174)
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-    from pipeline import align, ingest, sentences
+    from pipeline import align, embed, ingest, sentences
 
 
 def paragraph_ordinals(sents: Sequence[sentences.Sentence]) -> list[int]:
@@ -58,8 +58,14 @@ def paragraph_agreement(
     beads: Sequence[align.Bead],
     src: Sequence[sentences.Sentence],
     dst: Sequence[sentences.Sentence],
+    *,
+    src_subset: set[int] | None = None,
 ) -> Agreement:
-    """独↔英でのみ意味を持つ。両版の段落構造が一致していることを前提に検算する。"""
+    """独↔英でのみ意味を持つ。両版の段落構造が一致していることを前提に検算する。
+
+    `src_subset` を渡すと、その文から出た対応だけで測る。手法ごとに被覆率が違うと
+    分母が変わり、**飛ばすほど有利になる**ので、比べるときは共通部分で測り直す。
+    """
     po_src = paragraph_ordinals(src)
     po_dst = paragraph_ordinals(dst)
     n_src, n_dst = max(po_src) + 1, max(po_dst) + 1
@@ -68,6 +74,8 @@ def paragraph_agreement(
             f"段落一致率は段落構造が一致する組でしか定義できない({n_src} 対 {n_dst})"
         )
     pairs = align.links(beads)
+    if src_subset is not None:
+        pairs = [(i, j) for i, j in pairs if i in src_subset]
     matched = sum(1 for i, j in pairs if po_src[i] == po_dst[j])
     return Agreement(len(pairs), matched)
 
@@ -82,17 +90,34 @@ class Refinement:
         return self.violations / self.paragraphs if self.paragraphs else 0.0
 
 
+def covered_dst_paragraphs(
+    beads: Sequence[align.Bead], dst: Sequence[sentences.Sentence]
+) -> set[int]:
+    po_dst = paragraph_ordinals(dst)
+    return {po_dst[j] for _, j in align.links(beads)}
+
+
 def refinement_violations(
     beads: Sequence[align.Bead],
     src: Sequence[sentences.Sentence],
     dst: Sequence[sentences.Sentence],
+    *,
+    dst_subset: set[int] | None = None,
 ) -> Refinement:
-    """dst の一段落が src の複数段落にまたがった件数。dst が細かい側。"""
+    """dst の一段落が src の複数段落にまたがった件数。dst が細かい側。
+
+    `dst_subset` を渡すと、その段落だけで測る。**分母は手法ごとに違う** ——
+    相手の付かなかった段落は数に入らないので、飛ばすほど破れが減って見える。
+    比べるときは全手法が覆った段落だけで測り直す。
+    """
     po_src = paragraph_ordinals(src)
     po_dst = paragraph_ordinals(dst)
     spans: dict[int, set[int]] = {}
     for i, j in align.links(beads):
-        spans.setdefault(po_dst[j], set()).add(po_src[i])
+        p = po_dst[j]
+        if dst_subset is not None and p not in dst_subset:
+            continue
+        spans.setdefault(p, set()).add(po_src[i])
     violations = sum(1 for v in spans.values() if len(v) > 1)
     return Refinement(len(spans), violations)
 
@@ -104,8 +129,21 @@ PAIRS = [
 ]
 
 
-def run() -> dict[tuple[str, str], dict[str, object]]:
+def run(*, with_embeddings: bool = True) -> dict[tuple[str, str], dict[str, object]]:
+    """三手法を同じ段落オラクルで測る。
+
+    埋め込みが手元に無ければ、その手法だけ飛ばして残り二つを出す
+    (黙って全部を諦めない)。
+    """
     sents = sentences.load_all()
+    vecs: dict[str, object] | None = None
+    if with_embeddings:
+        try:
+            vecs = embed.load_cached()
+        except embed.ModelMissing as e:
+            print(f"[埋め込みなしで続行] {e}")
+            vecs = None
+
     out: dict[tuple[str, str], dict[str, object]] = {}
     for a, b in PAIRS:
         src_t = [s.text for s in sents[a]]
@@ -116,6 +154,11 @@ def run() -> dict[tuple[str, str], dict[str, object]]:
             "diagonal": align.align_diagonal(len(src_t), len(dst_t)),
         }
         row: dict[str, object] = {"c": c, "n_src": len(src_t), "n_dst": len(dst_t)}
+        if vecs is not None:
+            chance = align.chance_similarity(vecs[a], vecs[b])
+            row["chance"] = chance
+            methods["embedding"] = align.align_embeddings(
+                vecs[a], vecs[b], baseline=chance)
         for name, beads in methods.items():
             entry: dict[str, object] = {
                 # 対応そのものを持たせる。DP は 3 組で 40 秒かかるので、
@@ -134,20 +177,65 @@ def run() -> dict[tuple[str, str], dict[str, object]]:
             ref = refinement_violations(beads, sents[a], sents[b])
             entry["refinement_violations"] = ref.violations
             entry["refinement_paragraphs"] = ref.paragraphs
+            cov_src, cov_dst = align.coverage(beads, len(src_t), len(dst_t))
+            entry["coverage_src"] = cov_src
+            entry["coverage_dst"] = cov_dst
             row[name] = entry
+
+        # 手法ごとに被覆が違うので、**全手法が覆った部分だけ**でもう一度測る。
+        # 飛ばすほど有利になる物差しを、そのまま並べて比べてはいけない。
+        names = [n for n in METHODS if n in row]
+        common_src = set.intersection(*(
+            {i for bd in row[n]["beads"] for i in range(bd.i0, bd.i1)
+             if bd.shape[1] > 0} for n in names))
+        common_dst_p = set.intersection(*(
+            covered_dst_paragraphs(row[n]["beads"], sents[b]) for n in names))
+        row["common_src_sentences"] = len(common_src)
+        row["common_dst_paragraphs"] = len(common_dst_p)
+        for n in names:
+            beads = row[n]["beads"]
+            try:
+                agr = paragraph_agreement(beads, sents[a], sents[b],
+                                          src_subset=common_src)
+                row[n]["paragraph_agreement_common"] = agr.rate
+                row[n]["links_common"] = agr.links
+            except ValueError:
+                row[n]["paragraph_agreement_common"] = None
+                row[n]["links_common"] = None
+            ref = refinement_violations(beads, sents[a], sents[b],
+                                        dst_subset=common_dst_p)
+            row[n]["refinement_violations_common"] = ref.violations
+            row[n]["refinement_paragraphs_common"] = ref.paragraphs
         out[(a, b)] = row
     return out
 
 
+METHODS = ("gale_church", "diagonal", "embedding")
+
+
 def main() -> None:
     for (a, b), row in run().items():
-        print(f"--- {a} → {b}  (c={row['c']:.4f}) ---")
-        for name in ("gale_church", "diagonal"):
-            e = row[name]
+        chance = row.get("chance")
+        head = f"--- {a} → {b}  (c={row['c']:.4f}"
+        head += f", 偶然の水準={chance:.4f})" if chance is not None else ")"
+        print(head + " ---")
+        for name in METHODS:
+            e = row.get(name)
+            if e is None:
+                continue
             agr = e["paragraph_agreement"]
-            agr_s = "—(段落構造が違う)" if agr is None else f"{agr:.4f}"
+            agr_s = "     —" if agr is None else f"{agr:.4f}"
+            agrc = e["paragraph_agreement_common"]
+            agrc_s = "     —" if agrc is None else f"{agrc:.4f}"
             print(f"  {name:12s} 対応 {e['links']:5d}  段落一致率 {agr_s}"
-                  f"  細分の破れ {e['refinement_violations']:4d}/{e['refinement_paragraphs']}")
+                  f"  細分の破れ {e['refinement_violations']:4d}/{e['refinement_paragraphs']}"
+                  f"  被覆 {e['coverage_src']:.3f}/{e['coverage_dst']:.3f}")
+            print(f"  {'':12s} 共通部分: 段落一致率 {agrc_s}"
+                  f"  細分の破れ {e['refinement_violations_common']:4d}"
+                  f"/{e['refinement_paragraphs_common']}")
+        print(f"    (共通部分 = 全手法が対応をつけた src 文 "
+              f"{row['common_src_sentences']} 件 / dst 段落 "
+              f"{row['common_dst_paragraphs']} 件)")
 
 
 if __name__ == "__main__":

@@ -174,6 +174,65 @@ def test_t014_every_gate_is_tested_or_declared_unimplemented():
     assert fake_unguarded == ["G-99"], "検査が働いていない"
 
 
+def _gate_loop_claims(spec: str) -> dict[str, str]:
+    """ゲート表が書いている「L*n* で実装」を拾う。"""
+    out: dict[str, str] = {}
+    for cells in _table_rows(spec, "ID", "ゲート"):
+        if re.fullmatch(r"G-\d+", cells[0]):
+            m = re.search(r"L(\d+) で実装", cells[-1])
+            if m:
+                out[cells[0]] = f"L{m.group(1)}"
+    return out
+
+
+def _loop_plan_gates(spec: str) -> dict[str, list[int]]:
+    """ループ計画がどのループでどのゲートを挙げているか(**複数ありうる**)。
+
+    ゲートは後のループで拡張されることがある —— G-05 と G-07 は L2 で作り
+    L4 で埋め込み手法にも広げたので、計画には二度出る。ゲート表が書くのは
+    **最初に実装したループ**なので、突合は最小値に対して行う。
+    """
+    out: dict[str, list[int]] = {}
+    for cells in _table_rows(spec, "", "内容"):
+        loop = cells[0].strip()
+        if not re.fullmatch(r"L\d+", loop):
+            continue
+        for gate in re.findall(r"G-\d+", cells[2]):
+            out.setdefault(gate, []).append(int(loop[1:]))
+    return out
+
+
+@pytest.mark.validation
+def test_t044_gate_table_agrees_with_loop_plan():
+    """T-044 — ゲート表の「L*n* で実装」と、ループ計画の割り当てが一致する。
+
+    ループを繰り下げると**ゲート表の参照だけが古びる**。L4 の繰り下げで
+    実際に 5 箇所ずれた。どちらも人が書く表なので、機械で突き合わせる。
+    """
+    spec = SPEC.read_text(encoding="utf-8")
+    claims = _gate_loop_claims(spec)
+    plan = _loop_plan_gates(spec)
+    assert claims and plan, "ゲート表かループ計画が読めていない"
+
+    first = {g: f"L{min(v)}" for g, v in plan.items()}
+    mismatched = {g: (claims[g], first[g]) for g in claims.keys() & first.keys()
+                  if claims[g] != first[g]}
+    assert not mismatched, f"ゲート表とループ計画が食い違う: {mismatched}"
+
+    # 計画に載っているゲートは、ゲート表にも存在すること
+    assert set(plan) <= set(re.findall(r"G-\d+", spec)), "計画に無いゲートがある"
+
+    # 複数のループにまたがるゲートが実在すること —— この緩和が必要だった証拠
+    assert any(len(v) > 1 for v in plan.values()), (
+        "またがるゲートが無い — 最小値を取る緩和が何もしていない"
+    )
+
+    # 陽性対照 — 番号をずらしたら落ちること
+    shifted = {g: f"L{min(v) + 1}" for g, v in plan.items()}
+    assert {g for g in claims.keys() & shifted.keys()
+            if claims[g] != shifted[g]}, "検査が働いていない"
+
+
 @pytest.mark.validation
 def test_t014_referenced_gates_exist_in_spec():
     """TEST_SPEC が実在しないゲートを参照していないこと(逆向きの検査)。"""

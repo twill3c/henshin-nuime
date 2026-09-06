@@ -35,6 +35,8 @@ import math
 from dataclasses import dataclass
 from typing import Sequence
 
+import numpy as np
+
 # Gale & Church (1993) Table 5。**この corpus に当てはめ直していない。**
 PRIOR_COST = {
     (1, 1): 0,
@@ -179,6 +181,95 @@ def links(beads: Sequence[Bead]) -> list[tuple[int, int]]:
             for j in range(b.j0, b.j1):
                 out.append((i, j))
     return out
+
+
+# --- 埋め込みで引く縫い目 -----------------------------------------------------
+#
+# **自由なつまみを置かない。** 対応の良し悪しは「たまたま同じくらい似ている組」より
+# どれだけ似ているかで測る。基準の似かたは、全対の cos の平均から出す ——
+# これは対応を一切使わずに計算できるので循環しない。
+# 飛ばす(1-0 / 0-1)は 0 点。だから「偶然の水準を超えない対応」は組まれない。
+
+
+def chance_similarity(src: np.ndarray, dst: np.ndarray) -> float:
+    """無関係な組がどれくらい似て見えるかの水準。**対応を使わずに出す。**"""
+    return float(_unit(src).mean(axis=0) @ _unit(dst).mean(axis=0))
+
+
+def _unit(x: np.ndarray) -> np.ndarray:
+    x = np.asarray(x, dtype=np.float64)
+    if x.ndim != 2 or x.shape[0] == 0:
+        raise ValueError(f"(文数, 次元) の行列が要る: {x.shape}")
+    n = np.linalg.norm(x, axis=1, keepdims=True)
+    if not np.all(n > 0):
+        raise ValueError("長さ 0 のベクトルがある")
+    return x / n
+
+
+def _pair_tables(src: np.ndarray, dst: np.ndarray) -> dict[tuple[int, int], np.ndarray]:
+    """対応の形ごとの類似度表。2 文をまとめるときは埋め込みの平均を取る。"""
+    a, b = _unit(src), _unit(dst)
+    a2 = _unit(a[:-1] + a[1:]) if len(a) > 1 else np.empty((0, a.shape[1]))
+    b2 = _unit(b[:-1] + b[1:]) if len(b) > 1 else np.empty((0, b.shape[1]))
+    return {(1, 1): a @ b.T, (2, 1): a2 @ b.T, (1, 2): a @ b2.T, (2, 2): a2 @ b2.T}
+
+
+def align_embeddings(src: np.ndarray, dst: np.ndarray, *,
+                     baseline: float) -> list[Bead]:
+    """**引数は埋め込みだけ**(G-03)。本文も段落も識別子も渡らない。
+
+    偶然の水準 `baseline` を超えたぶんの合計が最大になる単調な経路を選ぶ。
+    超えない対応は組まれず、その文は飛ばされる —— だから被覆率を併記する。
+    """
+    tables = _pair_tables(src, dst)
+    n, m = len(src), len(dst)
+    neg = -math.inf
+    best = [[neg] * (m + 1) for _ in range(n + 1)]
+    back: list[list[tuple[int, int] | None]] = [[None] * (m + 1) for _ in range(n + 1)]
+    best[0][0] = 0.0
+    shapes = ((1, 1), (2, 1), (1, 2), (2, 2), (1, 0), (0, 1))
+
+    for i in range(n + 1):
+        row = best[i]
+        for j in range(m + 1):
+            here = row[j]
+            if here == neg:
+                continue
+            for di, dj in shapes:
+                ni, nj = i + di, j + dj
+                if ni > n or nj > m:
+                    continue
+                gain = 0.0 if (di == 0 or dj == 0) else (
+                    float(tables[(di, dj)][i, j]) - baseline)
+                score = here + gain
+                if score > best[ni][nj]:
+                    best[ni][nj] = score
+                    back[ni][nj] = (di, dj)
+
+    if best[n][m] == neg:
+        raise ValueError("経路が見つからなかった")
+    beads: list[Bead] = []
+    i, j = n, m
+    while (i, j) != (0, 0):
+        step = back[i][j]
+        if step is None:
+            raise ValueError(f"経路が途切れた: ({i}, {j})")
+        di, dj = step
+        beads.append(Bead(i - di, i, j - dj, j))
+        i, j = i - di, j - dj
+    beads.reverse()
+    return beads
+
+
+def coverage(beads: Sequence[Bead], n_src: int, n_dst: int) -> tuple[float, float]:
+    """相手が付いた文の割合(src 側, dst 側)。飛ばした文は分子に入らない。
+
+    手法どうしを比べるとき、**被覆率が違えば段落一致率の分母も違う**。
+    片方だけを見て「一致率が高い」と言えないので、必ず対で出す。
+    """
+    src_hit = {i for b in beads if b.shape[1] > 0 for i in range(b.i0, b.i1)}
+    dst_hit = {j for b in beads if b.shape[0] > 0 for j in range(b.j0, b.j1)}
+    return len(src_hit) / n_src, len(dst_hit) / n_dst
 
 
 def shape_counts(beads: Sequence[Bead]) -> dict[tuple[int, int], int]:
