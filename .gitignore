@@ -21,8 +21,16 @@ models/*/model.onnx
 models/*/model.safetensors
 models/*/tokenizer.json
 
-# 公開面(L6 以降)
+# 公開面
 node_modules/
 .next/
 out/
 .vercel/
+tsconfig.tsbuildinfo
+
+# 検品の産物(スクリーンショット)。`node scripts/inspect.mjs --shots` で作り直せる
+artifacts/
+
+# 焼いたデータ。`python -m pipeline.bake` で作り直せる。
+# **版に残さない** —— 縫い目を焼き直すたびに 479 KB の差分が積み上がる。
+public/data/
