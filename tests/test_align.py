@@ -28,14 +28,8 @@ FORBIDDEN_ATTRS = {"chapter", "paragraph", "pid", "sid", "edition_id", "index",
                    "paragraphs", "chapters"}
 
 
-@pytest.fixture(scope="session")
-def sents():
-    return sentences.load_all()
-
-
-@pytest.fixture(scope="session")
-def results():
-    return evaluate.run()
+# `sents` と `results` は tests/conftest.py が session スコープで持つ
+# (モジュールごとに定義すると共有されず、2 分の計算を何度も回すことになる)
 
 
 # --- T-024: 循環の禁止・構造 --------------------------------------------------

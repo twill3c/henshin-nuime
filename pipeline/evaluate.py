@@ -302,6 +302,112 @@ def refinement_outcomes(
     return {p: (1.0 if len(v) <= 1 else 0.0) for p, v in spans.items()}
 
 
+def _forward_map(beads: Sequence[align.Bead]) -> dict[int, set[int]]:
+    """src 文番号 → dst 文番号の集合。飛ばした文は鍵を持たない。"""
+    out: dict[int, set[int]] = {}
+    for i, j in align.links(beads):
+        out.setdefault(i, set()).add(j)
+    return out
+
+
+@dataclass(frozen=True)
+class Triangle:
+    compared: int      # 直接と合成の双方に行き先があった src 文の数
+    agreed: int        # 行き先が重なった数
+    only_direct: int   # 直接だけ行き先があった
+    only_composed: int # 合成だけ行き先があった
+    neither: int       # どちらも行き先が無かった
+
+    @property
+    def rate(self) -> float:
+        return self.agreed / self.compared if self.compared else 0.0
+
+
+def triangle_consistency(direct: Sequence[align.Bead],
+                         first: Sequence[align.Bead],
+                         second: Sequence[align.Bead],
+                         n_src: int) -> Triangle:
+    """`de→ja` と `(de→en)∘(en→ja)` が同じ日本語の文を指すかを数える(G-06)。
+
+    **正解ラベルを一切使わない。** 二つの経路は互いを参照していないので、
+    一致は「どちらの経路にも共通する何か」の証拠になる。
+
+    **ただし単独では品質を意味しない。** 比例写像(対角線)は合成もまた比例写像に
+    なるので**自明に一致する** —— 高い整合率は、良い手法であることの必要条件で
+    あって十分条件ではない(SPEC §3.9)。
+    """
+    d = _forward_map(direct)
+    f = _forward_map(first)
+    s = _forward_map(second)
+    agreed = compared = only_d = only_c = neither = 0
+    for i in range(n_src):
+        via = set()
+        for mid in f.get(i, ()):  # 独語 i → 英語 mid → 日本語
+            via |= s.get(mid, set())
+        here = d.get(i, set())
+        if here and via:
+            compared += 1
+            if here & via:
+                agreed += 1
+        elif here:
+            only_d += 1
+        elif via:
+            only_c += 1
+        else:
+            neither += 1
+    return Triangle(compared, agreed, only_d, only_c, neither)
+
+
+TRIANGLE = {
+    "direct": ("de_pg22367", "ja_aozora49866"),
+    "first": ("de_pg22367", "en_pg5200"),
+    "second": ("en_pg5200", "ja_aozora49866"),
+}
+NULL_TRIALS = 5
+NULL_SEED = 20260907
+
+
+def triangle_verdict(results: dict[tuple[str, str], dict[str, object]],
+                     *, trials: int = NULL_TRIALS,
+                     seed: int = NULL_SEED) -> dict[str, object]:
+    """全手法と帰無について三角整合率を出す(G-06)。
+
+    **単独の値を品質の根拠にしない。** 比例写像は合成もまた比例写像になるので
+    自明に 1.0 を取る —— それを実測で示すために、対角線も必ず並べる。
+    帰無は `en→ja` の行き先を無作為に置換したもので、
+    「一致が自明でも偶然でもない」ことをここで確かめる。
+    """
+    import numpy as np
+
+    direct = results[TRIANGLE["direct"]]
+    first = results[TRIANGLE["first"]]
+    second = results[TRIANGLE["second"]]
+    n_src = direct["n_src"]
+    n_dst = direct["n_dst"]
+    names = [m for m in METHODS if m in direct and m in first and m in second]
+    if not names:
+        raise ValueError("三手法のどれも揃っていない")
+
+    out: dict[str, object] = {"n_src": n_src, "n_dst": n_dst, "methods": names}
+    for m in names:
+        out[m] = triangle_consistency(direct[m]["beads"], first[m]["beads"],
+                                      second[m]["beads"], n_src)
+
+    rng = np.random.default_rng(seed)
+    null: dict[str, list[float]] = {}
+    for m in names:
+        rates = []
+        for _ in range(trials):
+            perm = rng.permutation(n_dst)
+            shuffled = [align.Bead(b.i0, b.i1, int(perm[b.j0]), int(perm[b.j0]) + 1)
+                        for b in second[m]["beads"] if b.shape[1] > 0]
+            rates.append(triangle_consistency(direct[m]["beads"], first[m]["beads"],
+                                              shuffled, n_src).rate)
+        null[m] = rates
+    out["null"] = null
+    return out
+
+
 ATTENTION_PAIR = ("de_pg22367", "en_pg5200")
 ATTENTION_SCORES = (Path(__file__).resolve().parent.parent
                     / "data" / "nmt" / "attention_de_en.npy")
@@ -365,7 +471,8 @@ def attention_verdict(*, chance_share: float | None = None) -> dict[str, object]
 
 
 def main() -> None:
-    for (a, b), row in run().items():
+    results = run()
+    for (a, b), row in results.items():
         chance = row.get("chance")
         head = f"--- {a} → {b}  (c={row['c']:.4f}"
         head += f", 偶然の水準={chance:.4f})" if chance is not None else ")"
@@ -390,6 +497,17 @@ def main() -> None:
         for name, r in row.get("tests", {}).items():
             print(f"    置換検定 {name:34s} 差 {r.observed:+.4f}  "
                   f"p {r.p_display}  ブロック {r.blocks}")
+
+    tri = triangle_verdict(results)
+    print(f"\n--- 三角整合  de→ja 対 (de→en)∘(en→ja) ---")
+    for m in tri["methods"]:
+        t = tri[m]
+        nulls = tri["null"][m]
+        print(f"  {m:12s} 整合率 {t.rate:.4f}  比較 {t.compared:4d}  "
+              f"直接のみ {t.only_direct:3d}  合成のみ {t.only_composed:3d}  "
+              f"どちらも無し {t.neither:3d}   帰無 {sum(nulls)/len(nulls):.4f}")
+    print("  ※ 比例写像(diagonal)は合成もまた比例写像なので**自明に 1.0** を取る。"
+          "整合率が高いことは良い手法であることを意味しない(SPEC §3.10)")
 
 
 if __name__ == "__main__":
