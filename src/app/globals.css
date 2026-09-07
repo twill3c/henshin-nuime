@@ -249,6 +249,74 @@ a {
   margin-right: 5px;
 }
 
+/* --- 図 --- */
+
+.figure {
+  margin: 18px 0 8px;
+  /* 図は横に縮まない。狭い画面では**中で横スクロールさせる** ——
+     ページ本体を横に溢れさせない(HC-078)。 */
+  overflow-x: auto;
+}
+
+.figure svg {
+  display: block;
+  width: 100%;
+  min-width: 560px;
+  height: auto;
+  background: var(--bg-panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.figure .grid line {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+
+.figure .frame {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 1;
+}
+
+.figure .axis text {
+  fill: var(--ink-quiet);
+  font-family: system-ui, sans-serif;
+  font-size: 11px;
+}
+
+.figure .band rect {
+  fill: var(--en);
+}
+
+.figure .seam {
+  fill: none;
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.figure .seam.control {
+  stroke-width: 1.2;
+  stroke-dasharray: 4 4;
+  opacity: 0.85;
+}
+
+.verdict {
+  margin: 20px 0 4px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--ja);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  font-size: 14px;
+  line-height: 1.9;
+}
+
+.verdict[data-passed="true"] {
+  border-left-color: var(--amber);
+}
+
 /* --- フッタ --- */
 
 .site-foot {

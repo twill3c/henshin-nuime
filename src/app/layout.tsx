@@ -24,6 +24,8 @@ export default function RootLayout({
             <nav className="nav">
               <Link href="/">はじめに</Link>
               <Link href="/yomu/">三面の本文</Link>
+              <Link href="/chizu/">縫い目の地図</Link>
+              <Link href="/obi/">注意の帯</Link>
             </nav>
           </div>
         </header>

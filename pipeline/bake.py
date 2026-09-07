@@ -97,7 +97,12 @@ def build() -> dict[str, object]:
         cross[pair_key] = per_cross
     files["links.json"] = links
 
+    attention = _bake_attention(sents)
+    if attention is not None:
+        files["attention.json"] = attention
+
     files["manifest.json"] = {
+        "has_attention": attention is not None,
         "chapters": sorted({s.chapter for s in sents[EDITIONS[0][1]]}),
         "methods": list(METHODS),
         "pairs": [k for k, _ in PAIRS],
@@ -119,6 +124,49 @@ def build() -> dict[str, object]:
         ],
     }
     return files
+
+
+def _bake_attention(sents) -> dict[str, object] | None:
+    """cross-attention の点数表と、目玉の判定を焼く。
+
+    点数表は帯の中にしか値が無い(全体の 1%)ので**疎な三つ組**で持つ。
+    密に書くと 696×771 で 2 MB を超えるが、三つ組なら 82 KB で済む。
+
+    **落ちた判定もそのまま焼く。** 図に出すのは結果であって、良い結果ではない。
+    """
+    import numpy as np
+
+    if not evaluate.ATTENTION_SCORES.exists():
+        return None
+    scores = np.load(evaluate.ATTENTION_SCORES)
+    verdict = evaluate.attention_verdict()
+    nz = np.argwhere(scores > 0)
+    a, b = evaluate.ATTENTION_PAIR
+    return {
+        "pair": "de_en",
+        "shape": list(scores.shape),
+        # [独語の文番号, 英語の文番号, 注意のシェア]。小数 3 桁で足りる(値域 0〜1)
+        "cells": [[int(i), int(j), round(float(scores[i, j]), 3)] for i, j in nz],
+        "chance_share": verdict["chance_share"],
+        "links": [[i, j] for i, j in align.links(verdict["attention"]["beads"])],
+        "verdict": {
+            "attention": {
+                "links": verdict["attention"]["links"],
+                "paragraph_agreement": verdict["attention"]["paragraph_agreement"],
+                "coverage_src": verdict["attention"]["coverage_src"],
+            },
+            "diagonal": {
+                "links": verdict["diagonal"]["links"],
+                "paragraph_agreement": verdict["diagonal"]["paragraph_agreement"],
+            },
+            "difference": verdict["test"].observed,
+            "p_value": verdict["test"].p_value,
+            "p_display": verdict["test"].p_display,
+            "passed": bool(verdict["test"].observed > 0
+                           and verdict["test"].p_value < 0.01),
+            "threshold": 0.01,
+        },
+    }
 
 
 def _global_paragraphs(sents) -> list[int]:

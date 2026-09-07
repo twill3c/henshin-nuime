@@ -56,6 +56,69 @@ function serve() {
 const problems = [];
 const note = (m) => problems.push(m);
 
+/**
+ * 図の中身が `viewBox` に収まっているかを測る(G-10 / HC-159)。
+ *
+ * **ページの横溢れ検査は、図の内側の切れを見ない。** 軸ラベル・凡例・注記は
+ * 描画領域の外に置かれるのが普通なので、`viewBox` を**データの範囲**から
+ * 決めると静かに切り取られる。各要素の境界矩形を `viewBox` と比べる。
+ * 文字の左サイドベアリングぶんのはみ出しなど、**幅によってしか現れない**
+ * ものもあるので、幅ごとに測る。
+ */
+async function measureFigures(page, label) {
+  const report = await page.evaluate(() => {
+    const out = [];
+    for (const svg of document.querySelectorAll(".figure svg")) {
+      // **画面座標で比べる。** `getBBox()` は要素自身の座標系(変換を適用する前)
+      // の矩形を返すので、`rotate(-90)` を掛けた軸ラベルでは回転前の位置と
+      // viewBox を比べることになり、正しく描かれているものを落とす。
+      // `getBoundingClientRect()` なら変換も入れ子も込みで「描かれる場所」が出る。
+      const frame = svg.getBoundingClientRect();
+      let checked = 0;
+      const bad = [];
+      for (const el of svg.querySelectorAll("text, path, rect, line, circle")) {
+        const r = el.getBoundingClientRect();
+        if (r.width === 0 && r.height === 0) continue;
+        checked += 1;
+        const eps = 1;
+        if (
+          r.left < frame.left - eps ||
+          r.top < frame.top - eps ||
+          r.right > frame.right + eps ||
+          r.bottom > frame.bottom + eps
+        ) {
+          bad.push({
+            tag: el.tagName,
+            text: (el.textContent ?? "").slice(0, 20),
+            x: +r.left.toFixed(1), y: +r.top.toFixed(1),
+            w: +r.width.toFixed(1), h: +r.height.toFixed(1),
+          });
+        }
+      }
+      out.push({
+        box: { w: +frame.width.toFixed(1), h: +frame.height.toFixed(1) },
+        checked,
+        bad,
+      });
+    }
+    return out;
+  });
+
+  if (!report.length) note(`${label}: 図が一つも見つからない`);
+  for (const [k, r] of report.entries()) {
+    if (r.checked < 5) {
+      note(`${label}: 図 ${k} の測れた要素が ${r.checked} 個 — 走査が働いていない`);
+    }
+    for (const b of r.bad) {
+      note(
+        `${label}: 図 ${k} の <${b.tag}>「${b.text}」が図の枠からはみ出す ` +
+          `(${b.x},${b.y} ${b.w}×${b.h} / 枠 ${r.box.w}×${r.box.h})`,
+      );
+    }
+  }
+  return report;
+}
+
 /** 幾何を測る。要素が在るかではなく、どこにどう置かれているかを見る。 */
 async function measure(page, label) {
   const geo = await page.evaluate(() => {
@@ -188,10 +251,34 @@ async function main() {
         note(`/yomu @${width}: 手法を切り替えても何も光らない`);
       }
 
+      // --- 図の二枚 ---
+      for (const [path, name] of [["/chizu/", "縫い目の地図"], ["/obi/", "注意の帯"]]) {
+        await page.goto(`${base}${path}`, { waitUntil: "networkidle" });
+        try {
+          await page.waitForSelector(".figure svg .seam", { timeout: 20000 });
+        } catch {
+          const shown = await page.evaluate(() => document.body.innerText.slice(0, 120));
+          note(`${path} @${width}: 図が出ない。画面にあるのは「${shown.trim()}」`);
+          continue;
+        }
+        await measure(page, `${path} @${width}`);
+        await measureFigures(page, `${path} @${width}`);
+        // 経路が実際に描かれているか(空の d は描かれない)
+        const drawn = await page.evaluate(() =>
+          [...document.querySelectorAll(".figure svg .seam")].filter(
+            (p) => (p.getAttribute("d") ?? "").length > 10,
+          ).length,
+        );
+        if (drawn < 1) note(`${path} @${width}: 経路が一本も描かれていない`);
+        if (shots) {
+          await page.screenshot({ path: join(SHOTS, `${name}-${width}.png`) });
+        }
+      }
+
       if (errors.length) note(`@${width}: ブラウザのエラー ${errors.length} 件: ${errors[0]}`);
       if (shots) {
         // 素の状態(既定の手法・何も選んでいない)を撮り直す。
-        await page.reload({ waitUntil: "networkidle" });
+        await page.goto(`${base}/yomu/`, { waitUntil: "networkidle" });
         await page.waitForSelector(".sentence");
         await page.screenshot({ path: join(SHOTS, `yomu-${width}.png`) });
       }
@@ -212,8 +299,33 @@ async function main() {
       console.error("検品器が異常を捕まえられない — 検品器のほうを疑うこと");
       process.exit(3);
     }
-    problems.length = mark; // 対照で足した分は本物ではないので戻す
+    problems.length = mark;
     await page.close();
+
+    // --- 陽性対照 その二: 図の枠からのはみ出しを捕まえるか ---
+    const fig = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    await fig.goto(`${base}/chizu/`, { waitUntil: "networkidle" });
+    await fig.waitForSelector(".figure svg .seam");
+    const clean = await measureFigures(fig, "陽性対照(図・素の状態)");
+    if (problems.length !== mark) {
+      console.error("素の図が既にはみ出している — 対照の前提が崩れている");
+      process.exit(3);
+    }
+    if (!clean.length || clean[0].checked < 5) {
+      console.error("図の走査が働いていない");
+      process.exit(3);
+    }
+    await fig.evaluate(() => {
+      const t = document.querySelector(".figure svg .axis text");
+      if (t) t.setAttribute("transform", "translate(-400 -400)");
+    });
+    await measureFigures(fig, "陽性対照(図・ずらした状態)");
+    if (problems.length === mark) {
+      console.error("図をずらしても検出できない — 図の検査が働いていない");
+      process.exit(3);
+    }
+    problems.length = mark; // 対照で足した分は本物ではないので戻す
+    await fig.close();
   } finally {
     await browser.close();
     server.close();
