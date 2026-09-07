@@ -9,6 +9,13 @@ data/editions/
 data/sentences/
 data/embeddings/
 
+# 学習した重みと注意の点数表(約 66 MB)。`python -m pipeline.nmt` で作り直せる。
+# **history.json だけは版に残す** —— 損失曲線と設定は成果物として小さく、
+# 学習し直さずに「どの条件で出た数字か」を追えるようにするため。
+data/nmt/*.npy
+data/nmt/model.pt
+data/nmt/vocab.json
+
 # 事前学習モデル(約 940 MB)。入手手順は README に書く
 models/*/model.onnx
 models/*/model.safetensors

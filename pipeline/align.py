@@ -214,15 +214,30 @@ def _pair_tables(src: np.ndarray, dst: np.ndarray) -> dict[tuple[int, int], np.n
     return {(1, 1): a @ b.T, (2, 1): a2 @ b.T, (1, 2): a @ b2.T, (2, 2): a2 @ b2.T}
 
 
-def align_embeddings(src: np.ndarray, dst: np.ndarray, *,
-                     baseline: float) -> list[Bead]:
-    """**引数は埋め込みだけ**(G-03)。本文も段落も識別子も渡らない。
+def tables_from_scores(scores: np.ndarray) -> dict[tuple[int, int], np.ndarray]:
+    """1 対 1 の点数表から、2 文まとめの表を作る。**まとめは平均で表す。**
 
-    偶然の水準 `baseline` を超えたぶんの合計が最大になる単調な経路を選ぶ。
-    超えない対応は組まれず、その文は飛ばされる —— だから被覆率を併記する。
+    埋め込みの場合(`_pair_tables`)はベクトルを足してから向きを揃えるが、
+    点数表しか無いときは点数の平均で代用する。**この二つは別物なので、
+    同じ関数で済ませずに分けてある。**
     """
-    tables = _pair_tables(src, dst)
-    n, m = len(src), len(dst)
+    s = np.asarray(scores, dtype=np.float64)
+    if s.ndim != 2 or s.size == 0:
+        raise ValueError(f"(src, dst) の点数表が要る: {s.shape}")
+    s21 = (s[:-1] + s[1:]) / 2 if s.shape[0] > 1 else np.empty((0, s.shape[1]))
+    s12 = (s[:, :-1] + s[:, 1:]) / 2 if s.shape[1] > 1 else np.empty((s.shape[0], 0))
+    s22 = ((s21[:, :-1] + s21[:, 1:]) / 2 if s21.size and s.shape[1] > 1
+           else np.empty((max(s.shape[0] - 1, 0), max(s.shape[1] - 1, 0))))
+    return {(1, 1): s, (2, 1): s21, (1, 2): s12, (2, 2): s22}
+
+
+def align_scores(tables: dict[tuple[int, int], np.ndarray], n: int, m: int, *,
+                 baseline: float) -> list[Bead]:
+    """点数表から単調な経路を選ぶ。**点数の出どころには依存しない。**
+
+    埋め込みの cos でも、cross-attention の重みでも、同じ DP を通す。
+    こうしておくと「手法が違うのか DP が違うのか」で迷わずに済む。
+    """
     neg = -math.inf
     best = [[neg] * (m + 1) for _ in range(n + 1)]
     back: list[list[tuple[int, int] | None]] = [[None] * (m + 1) for _ in range(n + 1)]
@@ -259,6 +274,28 @@ def align_embeddings(src: np.ndarray, dst: np.ndarray, *,
         i, j = i - di, j - dj
     beads.reverse()
     return beads
+
+
+def align_embeddings(src: np.ndarray, dst: np.ndarray, *,
+                     baseline: float) -> list[Bead]:
+    """**引数は埋め込みだけ**(G-03)。本文も段落も識別子も渡らない。
+
+    偶然の水準 `baseline` を超えたぶんの合計が最大になる単調な経路を選ぶ。
+    超えない対応は組まれず、その文は飛ばされる —— だから被覆率を併記する。
+    """
+    return align_scores(_pair_tables(src, dst), len(src), len(dst),
+                        baseline=baseline)
+
+
+def align_attention(scores: np.ndarray, *, baseline: float) -> list[Bead]:
+    """cross-attention 由来の点数表から縫い目を引く(G-08)。
+
+    **埋め込みと同じ DP・同じ形の対応・同じ「偶然の水準を超えたぶん」で選ぶ。**
+    違うのは点数の出どころだけなので、結果の差は手法の差として読める。
+    """
+    s = np.asarray(scores, dtype=np.float64)
+    return align_scores(tables_from_scores(s), s.shape[0], s.shape[1],
+                        baseline=baseline)
 
 
 def coverage(beads: Sequence[Bead], n_src: int, n_dst: int) -> tuple[float, float]:

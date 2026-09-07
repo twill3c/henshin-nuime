@@ -302,6 +302,68 @@ def refinement_outcomes(
     return {p: (1.0 if len(v) <= 1 else 0.0) for p, v in spans.items()}
 
 
+ATTENTION_PAIR = ("de_pg22367", "en_pg5200")
+ATTENTION_SCORES = (Path(__file__).resolve().parent.parent
+                    / "data" / "nmt" / "attention_de_en.npy")
+
+
+def attention_verdict(*, chance_share: float | None = None) -> dict[str, object]:
+    """目玉(G-08)の判定。**attention 由来の縫い目を対角線と比べる。**
+
+    比べるのは段落一致率で、単位は src 文・並べ替えのブロックはその文が属する段落
+    (§3.5 と同じ取り方)。**attention は窓が許す帯の中でしか対応を組めない**ので、
+    自由度は対角線より小さい。だから勝てば、勝ったぶんは本文から来ている。
+
+    判定に使う「偶然の水準」は窓の構造から決まる値(既定は `nmt.CHANCE_SHARE`)で、
+    結果を見てから選ぶつまみではない。
+    """
+    import json
+
+    import numpy as np
+
+    if not ATTENTION_SCORES.exists():
+        raise FileNotFoundError(
+            f"{ATTENTION_SCORES} が無い。`python -m pipeline.nmt` で作ること")
+    if chance_share is None:
+        # 学習時に記録した値を読む。**評価器から torch を引っぱらないため**に
+        # `nmt` を import せず、成果物の側から取る。
+        meta = json.loads((ATTENTION_SCORES.parent / "history.json")
+                          .read_text(encoding="utf-8"))
+        chance_share = float(meta["chance_share"])
+    scores = np.load(ATTENTION_SCORES)
+    sents = sentences.load_all()
+    a, b = ATTENTION_PAIR
+    n, m = scores.shape
+
+    beads = {
+        "attention": align.align_attention(scores, baseline=chance_share),
+        "diagonal": align.align_diagonal(n, m),
+    }
+    out: dict[str, object] = {"n_src": n, "n_dst": m, "chance_share": chance_share}
+    common = set.intersection(*(
+        {i for bd in v for i in range(bd.i0, bd.i1) if bd.shape[1] > 0}
+        for v in beads.values()))
+    out["common_src_sentences"] = len(common)
+    for name, bd in beads.items():
+        agr = paragraph_agreement(bd, sents[a], sents[b])
+        agr_c = paragraph_agreement(bd, sents[a], sents[b], src_subset=common)
+        cov = align.coverage(bd, n, m)
+        out[name] = {
+            "beads": bd, "links": agr.links, "paragraph_agreement": agr.rate,
+            "paragraph_agreement_common": agr_c.rate, "links_common": agr_c.links,
+            "coverage_src": cov[0], "coverage_dst": cov[1],
+        }
+
+    po_src = paragraph_ordinals(sents[a])
+    units = sorted(common)
+    blocks = [po_src[i] for i in units]
+    base = sentence_agreement_outcomes(beads["attention"], sents[a], sents[b], common)
+    comp = sentence_agreement_outcomes(beads["diagonal"], sents[a], sents[b], common)
+    out["test"] = stats.paired_permutation([base[i] for i in units],
+                                           [comp[i] for i in units], blocks)
+    return out
+
+
 def main() -> None:
     for (a, b), row in run().items():
         chance = row.get("chance")
