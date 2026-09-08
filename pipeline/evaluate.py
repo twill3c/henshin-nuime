@@ -408,6 +408,91 @@ def triangle_verdict(results: dict[tuple[str, str], dict[str, object]],
     return out
 
 
+def translator_lengths(results: dict[tuple[str, str], dict[str, object]],
+                       *, method: str = "embedding") -> dict[str, object]:
+    """**訳者差**を独語段落あたりの字数比で測る(F-11)。
+
+    この企画は公有の第二英訳を持たないので、訳者差は日本語側で測ると決めてある
+    (§2.1)。自前訳が全 97 段落そろってはじめて測れるようになった。
+
+    **原田訳は文単位で足してはいけない。** 縫い目は偶然の水準を超えない対応を
+    組まないので、日本語側で 2 割強を飛ばす。文単位で足すと原田訳だけが
+    系統的に少なく出て、**もっともらしい「差なし」が出る**(実際そう出た)。
+    だから原田訳の**段落**を縫い目の多数決で独語段落に割り当て、
+    その段落の字数を丸ごと足す —— こうすれば一字も落ちない。
+    落ちた分は `unassigned_chars` に出す。
+
+    **自前訳は段落を独語に合わせて作っている**ので、段落の切り方の差はここでは
+    測れない。測れるのは字数比だけである。
+    """
+    import collections
+
+    sents = sentences.load_all()
+    from . import translate as tr
+
+    own = {(r.chapter, r.index): r.text for r in tr.load_translation()}
+    if not own:
+        return {}
+    de = sents["de_pg22367"]
+    ja = sents["ja_aozora49866"]
+    beads = results[("de_pg22367", "ja_aozora49866")][method]["beads"]
+
+    votes: dict[tuple[int, int], collections.Counter] = collections.defaultdict(
+        collections.Counter)
+    for i, j in align.links(beads):
+        votes[(ja[j].chapter, ja[j].paragraph)][(de[i].chapter, de[i].paragraph)] += 1
+
+    ja_par: dict[tuple[int, int], int] = collections.Counter()
+    for x in ja:
+        ja_par[(x.chapter, x.paragraph)] += len(x.text)
+    harada: dict[tuple[int, int], int] = collections.Counter()
+    unassigned = 0
+    for k, v in ja_par.items():
+        if votes[k]:
+            harada[votes[k].most_common(1)[0][0]] += v
+        else:
+            unassigned += v
+
+    de_len: dict[tuple[int, int], int] = collections.Counter()
+    for x in de:
+        de_len[(x.chapter, x.paragraph)] += len(x.text)
+
+    rows = []
+    for k in sorted(de_len):
+        if not harada[k] or k not in own:
+            continue
+        rows.append({
+            "paragraph": f"{k[0]}-{k[1]}",
+            "de_chars": de_len[k],
+            "harada": harada[k] / de_len[k],
+            "own": len(own[k]) / de_len[k],
+        })
+    if not rows:
+        return {}
+
+    a = [r["harada"] for r in rows]
+    b = [r["own"] for r in rows]
+    blocks = list(range(len(rows)))
+    test = stats.paired_permutation(a, b, blocks, n_iter=20000, seed=NULL_SEED)
+    exact = stats.paired_permutation_exact(a[:12], b[:12], blocks[:12])
+    return {
+        "method": method,
+        "rows": rows,
+        "totals": {
+            "de": sum(de_len.values()),
+            "harada": sum(ja_par.values()),
+            "own": sum(len(v) for v in own.values()),
+        },
+        "unassigned_chars": unassigned,
+        "longer": {"harada": sum(1 for r in rows if r["harada"] > r["own"]),
+                   "own": sum(1 for r in rows if r["own"] > r["harada"]),
+                   "of": len(rows)},
+        "test": {"difference": test.observed, "p": test.p_display},
+        # **別経路で確かめる。** 12 段落なら入れ替えの通り数は有限なので厳密に出せる。
+        "exact_head": {"difference": exact.observed, "p": exact.p_display, "n": 12},
+    }
+
+
 ATTENTION_PAIR = ("de_pg22367", "en_pg5200")
 ATTENTION_SCORES = (Path(__file__).resolve().parent.parent
                     / "data" / "nmt" / "attention_de_en.npy")

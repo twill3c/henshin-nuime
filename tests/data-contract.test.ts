@@ -17,6 +17,7 @@ import {
   type Links,
   type Manifest,
   type Words,
+  type Zure,
 } from "../src/core/types";
 
 const DATA = join(process.cwd(), "public", "data");
@@ -237,6 +238,70 @@ maybe("焼いたデータの契約", () => {
     expect(sum).toBe(done);
     const denom = Object.values(own.by_chapter).reduce((a, v) => a + v[1], 0);
     expect(denom).toBe(total);
+  });
+
+  // 画面「ずれの図録」が読むデータ(T-077)。
+  it("図録の数字が、それ自身と食い違わない", () => {
+    const path = join(DATA, "zure.json");
+    if (!existsSync(path)) return;
+    const z = read<Zure>("zure.json");
+
+    for (const pair of manifest.pairs) {
+      const p = z.pairs[pair];
+      expect(p.n_src).toBe(manifest.editions.find((e) => e.key === "de")!.sentences);
+      for (const m of manifest.methods) {
+        const e = p.methods[m];
+        // 形の件数の合計が、対応の本数と食い違わない。
+        // **`0-1` と `1-0` は対応を生まない**ので、その分を除いて数える。
+        const shaped = Object.entries(e.shapes)
+          .filter(([k]) => !k.startsWith("0-") && !k.endsWith("-0"))
+          .reduce((a, [k, v]) => {
+            const [x, y] = k.split("-").map(Number);
+            return a + x * y * v;
+          }, 0);
+        expect(shaped).toBe(e.links);
+        expect(e.coverage_src).toBeGreaterThan(0);
+        expect(e.coverage_src).toBeLessThanOrEqual(1);
+        expect(e.refinement_violations).toBeLessThanOrEqual(e.refinement_paragraphs);
+      }
+      // 共通部分は素の集合より小さいか等しい
+      expect(p.common_src_sentences).toBeLessThanOrEqual(p.n_src);
+    }
+
+    // 三角整合: 内訳の合計が src 文の総数になる(分母の小ささを隠さない)
+    for (const m of manifest.methods) {
+      const t = z.triangle.methods[m];
+      expect(t.agreed).toBeLessThanOrEqual(t.compared);
+      expect(t.compared + t.only_direct + t.only_composed + t.neither).toBe(
+        z.triangle.n_src,
+      );
+      expect(Math.abs(t.rate - t.agreed / t.compared)).toBeLessThan(1e-9);
+    }
+    // **比例写像は自明に整合する。** 満点を取るのが「位置だけ」であることを固定する
+    expect(z.triangle.methods.diagonal.rate).toBeGreaterThan(0.99);
+    for (const m of manifest.methods) {
+      const nulls = z.triangle.null[m];
+      expect(nulls.length).toBeGreaterThan(0);
+      expect(Math.max(...nulls)).toBeLessThan(0.1); // 帰無は崩れる
+    }
+  });
+
+  it("訳者差が、行の集計と食い違わない", () => {
+    const path = join(DATA, "zure.json");
+    if (!existsSync(path)) return;
+    const tr = read<Zure>("zure.json").translators;
+    if (!tr) return;
+    expect(tr.rows.length).toBe(97); // 独語原文の段落数
+    const longer = tr.rows.filter((r) => r.harada > r.own).length;
+    expect(longer).toBe(tr.longer.harada);
+    expect(tr.longer.harada + tr.longer.own).toBeLessThanOrEqual(tr.longer.of);
+    // 割り当てられなかった原田訳が、全体のごく一部にとどまること
+    expect(tr.unassigned_chars / tr.totals.harada).toBeLessThan(0.02);
+    // 検定の差の向きと、行から数え直した向きが一致する
+    const mean =
+      tr.rows.reduce((a, r) => a + (r.harada - r.own), 0) / tr.rows.length;
+    expect(Math.sign(mean)).toBe(Math.sign(tr.test.difference));
+    expect(Math.abs(mean - tr.test.difference)).toBeLessThan(1e-6);
   });
 
   it("権利の表示義務が manifest に載っている", () => {

@@ -59,6 +59,63 @@ export type WordRow = {
 
 export type Words = { terms: WordRow[] };
 
+/** 画面「ずれの図録」が読むデータ。**一つの数字にまとめない。** */
+export type Zure = {
+  pairs: Record<
+    PairKey,
+    {
+      c: number;
+      n_src: number;
+      n_dst: number;
+      common_src_sentences: number;
+      common_dst_paragraphs: number;
+      methods: Record<
+        MethodKey,
+        {
+          /** 分割・併合の形("1-1" / "1-2" / "0-1" …)ごとの件数。 */
+          shapes: Record<string, number>;
+          links: number;
+          paragraph_agreement: number | null;
+          paragraph_agreement_common: number | null;
+          refinement_violations: number;
+          refinement_paragraphs: number;
+          refinement_violations_common: number;
+          refinement_paragraphs_common: number;
+          coverage_src: number;
+          coverage_dst: number;
+        }
+      >;
+    }
+  >;
+  triangle: {
+    n_src: number;
+    /** **片側だけの件数も持つ** —— 分母の小ささを隠さない。 */
+    methods: Record<
+      MethodKey,
+      {
+        rate: number;
+        compared: number;
+        agreed: number;
+        only_direct: number;
+        only_composed: number;
+        neither: number;
+      }
+    >;
+    null: Record<MethodKey, number[]>;
+  };
+  /** 訳者差。自前訳が全段落そろってはじめて測れる(§2.1)。 */
+  translators?: {
+    method: MethodKey;
+    rows: { paragraph: string; de_chars: number; harada: number; own: number }[];
+    totals: { de: number; harada: number; own: number };
+    /** 縫い目で独語段落へ割り当てられなかった原田訳の字数。 */
+    unassigned_chars: number;
+    longer: { harada: number; own: number; of: number };
+    test: { difference: number; p: string };
+    exact_head: { difference: number; p: string; n: number };
+  };
+};
+
 export type EditionText = {
   id: string;
   sentences: string[];

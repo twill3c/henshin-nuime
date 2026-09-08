@@ -330,6 +330,46 @@ async function main() {
         await page.screenshot({ path: join(SHOTS, `kotoba-${width}.png`) });
       }
 
+      // --- ずれの図録(F-11)---
+      //
+      // **表と図の両方を見る。** 表は狭い画面では中で横スクロールさせる約束なので、
+      // ページ本体が横に溢れていないことと、表が実際に行を持つことを別々に数える。
+      await page.goto(`${base}/zure/`, { waitUntil: "networkidle" });
+      try {
+        await page.waitForSelector(".table-wrap table", { timeout: 20000 });
+      } catch {
+        const shown = await page.evaluate(() => document.body.innerText.slice(0, 120));
+        note(`/zure @${width}: 表が出ない。画面にあるのは「${shown.trim()}」`);
+      }
+      const zure = await page.evaluate(() => {
+        const tables = [...document.querySelectorAll(".table-wrap table")];
+        return {
+          tables: tables.length,
+          rows: tables.map((t) => t.querySelectorAll("tbody tr").length),
+          dots: document.querySelectorAll(".figure svg circle").length,
+          // 表の中身が「—」だらけでないこと(データが来ていない状態を捕まえる)
+          dashes: tables
+            .flatMap((t) => [...t.querySelectorAll("td")])
+            .filter((td) => td.textContent?.trim() === "—").length,
+          cells: tables.flatMap((t) => [...t.querySelectorAll("td")]).length,
+          verdicts: document.querySelectorAll(".verdict").length,
+        };
+      });
+      if (zure.tables < 4) note(`/zure @${width}: 表が ${zure.tables} 枚しかない`);
+      if (zure.rows.some((r) => r < 3)) {
+        note(`/zure @${width}: 行が 3 本未満の表がある(${zure.rows.join(",")})`);
+      }
+      if (zure.dots < 90) note(`/zure @${width}: 図の点が ${zure.dots} 個(97 段落のはず)`);
+      if (zure.cells === 0 || zure.dashes / zure.cells > 0.3) {
+        note(`/zure @${width}: 表の ${zure.dashes}/${zure.cells} 升が「—」`);
+      }
+      if (zure.verdicts < 2) note(`/zure @${width}: 判定の欄が ${zure.verdicts} 個`);
+      await measure(page, `/zure @${width}`);
+      await measureFigures(page, `/zure @${width}`);
+      if (shots) {
+        await page.screenshot({ path: join(SHOTS, `zure-${width}.png`), fullPage: false });
+      }
+
       if (errors.length) note(`@${width}: ブラウザのエラー ${errors.length} 件: ${errors[0]}`);
       if (shots) {
         // 素の状態(既定の手法・何も選んでいない)を撮り直す。

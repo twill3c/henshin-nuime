@@ -27,6 +27,7 @@ export default function RootLayout({
               <Link href="/chizu/">縫い目の地図</Link>
               <Link href="/obi/">注意の帯</Link>
               <Link href="/kotoba/">一語の変身</Link>
+              <Link href="/zure/">ずれの図録</Link>
               <Link href="/nuu/">自分の文を縫う</Link>
             </nav>
           </div>

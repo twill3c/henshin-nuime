@@ -64,6 +64,62 @@ def chapter_offsets(sents) -> list[int]:
     return offsets
 
 
+def bake_zure(sents, results) -> dict:
+    """画面「ずれの図録」の材料(F-11)。
+
+    **一つの数字にまとめない。** 分割・併合の形、段落一致率、細分の破れ、
+    被覆、三角整合、そして訳者差 —— どれも別のものを見ているので、
+    並べて出して読み手に比べさせる。良い手法の結果だけを出すと対照が働かない。
+    """
+    out: dict[str, object] = {"pairs": {}}
+    for pair_key, (a, b) in PAIRS:
+        row = results[(a, b)]
+        methods: dict[str, object] = {}
+        for m in METHODS:
+            if m not in row:
+                continue
+            e = row[m]
+            methods[m] = {
+                "shapes": e["shapes"],
+                "links": e["links"],
+                "paragraph_agreement": e.get("paragraph_agreement"),
+                "paragraph_agreement_common": e.get("paragraph_agreement_common"),
+                "refinement_violations": e["refinement_violations"],
+                "refinement_paragraphs": e["refinement_paragraphs"],
+                "refinement_violations_common": e["refinement_violations_common"],
+                "refinement_paragraphs_common": e["refinement_paragraphs_common"],
+                "coverage_src": e["coverage_src"],
+                "coverage_dst": e["coverage_dst"],
+            }
+        out["pairs"][pair_key] = {
+            "c": row["c"],
+            "n_src": row["n_src"],
+            "n_dst": row["n_dst"],
+            "common_src_sentences": row["common_src_sentences"],
+            "common_dst_paragraphs": row["common_dst_paragraphs"],
+            "methods": methods,
+        }
+
+    tri = evaluate.triangle_verdict(results)
+    out["triangle"] = {
+        "n_src": tri["n_src"],
+        # **片側だけの件数も出す。** 分母(compared)がどれだけ小さいかを
+        # 見せないと、整合率だけが独り歩きする。
+        "methods": {m: {"rate": tri[m].rate, "compared": tri[m].compared,
+                        "agreed": tri[m].agreed,
+                        "only_direct": tri[m].only_direct,
+                        "only_composed": tri[m].only_composed,
+                        "neither": tri[m].neither}
+                    for m in tri["methods"]},
+        "null": {m: sorted(v) for m, v in tri["null"].items()},
+    }
+
+    zs = evaluate.translator_lengths(results)
+    if zs:
+        out["translators"] = zs
+    return out
+
+
 def _own_translation_stats(sents) -> dict:
     """自前和訳の進み具合。**分子と分母で出す。**"""
     from . import translate as tr
@@ -174,6 +230,8 @@ def build() -> dict[str, object]:
     words = bake_words(sents, results)
     if words:
         files["words.json"] = {"terms": words}
+
+    files["zure.json"] = bake_zure(sents, results)
 
     files["manifest.json"] = {
         "has_attention": attention is not None,

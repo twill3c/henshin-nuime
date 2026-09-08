@@ -503,6 +503,100 @@ a {
   font-size: 12px;
 }
 
+/* --- ずれの図録 --- */
+
+.wrap section {
+  margin: 34px 0 0;
+}
+
+.wrap section h2 {
+  font-size: 17px;
+  letter-spacing: 0.06em;
+  margin: 0 0 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+}
+
+.wrap section h3 {
+  font-size: 13px;
+  font-family: system-ui, sans-serif;
+  font-weight: 500;
+  color: var(--ink-dim);
+  margin: 18px 0 6px;
+}
+
+.stat-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 16px 0;
+}
+
+.stat {
+  flex: 1 1 160px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 14px;
+  background: var(--bg-panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.stat-label {
+  font-family: system-ui, sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--ink-quiet);
+}
+
+.stat-value {
+  font-size: 18px;
+  color: var(--ink);
+}
+
+.stat-sub {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: var(--amber);
+}
+
+/* 表は狭い画面では**中で**横スクロールさせる。ページ本体を溢れさせない。 */
+.table-wrap {
+  overflow-x: auto;
+  margin: 0 0 18px;
+}
+
+.table-wrap table {
+  border-collapse: collapse;
+  width: 100%;
+  min-width: 520px;
+  font-family: system-ui, sans-serif;
+  font-size: 13px;
+}
+
+.table-wrap th,
+.table-wrap td {
+  border: 1px solid var(--line);
+  padding: 6px 10px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.table-wrap thead th {
+  background: var(--bg-panel);
+  color: var(--ink-quiet);
+  font-weight: 500;
+  font-size: 12px;
+}
+
+.table-wrap tbody th {
+  text-align: left;
+  color: var(--ink);
+  font-weight: 500;
+  background: var(--bg-panel);
+}
+
 /* --- フッタ --- */
 
 .site-foot {
