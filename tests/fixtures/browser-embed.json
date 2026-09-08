@@ -1,0 +1,94 @@
+{
+ "note": "局所で量子化モデルを**一文ずつ**回して出した期待値。ブラウザ(transformers.js)が同じモデルファイルを同じ回し方で通して同じ値を出すかを G-18 で確かめる。本文側は fp32 で焼いたもの。 作り直し: scripts/make_g18_fixture.py",
+ "why_one_at_a_time": "量子化モデルでは、まとめて通すか一文ずつ通すかで出力が変わる。実測(この 3 文): fp32 は最大差 0.000e+00、量子化は最大差 7.538e-02・cos 最小 0.986824。ブラウザは照会を一文ずつ回すので、期待値もそう作らないと揃わない。",
+ "measured": "2026-09-08",
+ "batching": {
+  "quantized": {
+   "max_abs_diff": 0.07538,
+   "cos_min": 0.986824
+  },
+  "fp32": {
+   "max_abs_diff": 0.0,
+   "cos_min": 1.0
+  }
+ },
+ "fp32_vs_quantized": {
+  "max_abs_diff": 0.0827,
+  "cos_median": 0.995136,
+  "cos_min": 0.987924,
+  "sample": 24
+ },
+ "quantized_query_rank1": {
+  "hit": 120,
+  "of": 120,
+  "note": "量子化の照会 → fp32 で焼いた本文。独英日 各 40 件"
+ },
+ "cases": [
+  {
+   "edition": "de",
+   "index": 401,
+   "text": "Denn in einem Raum, in dem Gregor ganz allein die leeren Wände beherrschte, würde wohl kein Mensch außer Grete jemals einzutreten sich getrauen.",
+   "expected": {
+    "de": {
+     "index": 401,
+     "score": 0.9888,
+     "text": "Denn in einem Raum, in dem Gregor ganz allein die leeren Wände beherrschte, würde wohl kein Mensch außer Grete jemals einzutreten sich getrauen."
+    },
+    "en": {
+     "index": 446,
+     "score": 0.7539,
+     "text": "Grete would probably be the only one who would dare enter a room dominated by Gregor crawling about the bare walls by himself."
+    },
+    "ja": {
+     "index": 695,
+     "score": 0.7941,
+     "text": "というのは、がらんとした四方の壁をグレゴールがまったくひとりで支配しているような部屋には、グレーテ以外のどんな人間でもけっしてあえて入ってこようとはしないだろう。"
+    }
+   }
+  },
+  {
+   "edition": "en",
+   "index": 740,
+   "text": "Once there, all three took their hats from the stand, took their sticks from the holder, bowed without a word and left the premises.",
+   "expected": {
+    "de": {
+     "index": 668,
+     "score": 0.6104,
+     "text": "Im Vorzimmer nahmen alle drei die Hüte vom Kleiderrechen, zogen ihre Stöcke aus dem Stockbehälter, verbeugten sich stumm und verließen die Wohnung."
+    },
+    "en": {
+     "index": 740,
+     "score": 0.9967,
+     "text": "Once there, all three took their hats from the stand, took their sticks from the holder, bowed without a word and left the premises."
+    },
+    "ja": {
+     "index": 1182,
+     "score": 0.7741,
+     "text": "玄関の間で三人はそろって衣裳かけから帽子を取り、ステッキ立てからステッキを抜き出し、無言のままお辞儀をして、住居を出ていった。"
+    }
+   }
+  },
+  {
+   "edition": "ja",
+   "index": 475,
+   "text": "ところが、ドアはもう二度と開かれず、グレゴールが待っていたこともむなしかった。",
+   "expected": {
+    "de": {
+     "index": 274,
+     "score": 0.7182,
+     "text": "Die Tür wurde noch mit dem Stock zugeschlagen, dann war es endlich still."
+    },
+    "en": {
+     "index": 683,
+     "score": 0.7173,
+     "text": "He did not turn his head until he had reached the doorway."
+    },
+    "ja": {
+     "index": 475,
+     "score": 0.9952,
+     "text": "ところが、ドアはもう二度と開かれず、グレゴールが待っていたこともむなしかった。"
+    }
+   }
+  }
+ ]
+}

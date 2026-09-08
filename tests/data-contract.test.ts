@@ -19,6 +19,8 @@ import {
 } from "../src/core/types";
 
 const DATA = join(process.cwd(), "public", "data");
+/** 焼いた埋め込みの次元。`src/core/browser-embed.ts` の読み方と揃える。 */
+const DIM = 384;
 const read = <T,>(name: string): T =>
   JSON.parse(readFileSync(join(DATA, name), "utf-8")) as T;
 
@@ -161,6 +163,40 @@ maybe("焼いたデータの契約", () => {
   it("本文に空の文が無い", () => {
     for (const e of manifest.editions) {
       for (const s of texts[e.key].sentences) expect(s.trim().length).toBeGreaterThan(0);
+    }
+  });
+
+  // 焼いた埋め込みは**生の float32** で配る。JSON と違って構造が入っていないので、
+  // 形を取り違えても誰も落ちない —— 次元がずれても、文の本数がずれても、
+  // `Float32Array` には黙って載る。読める形かどうかを、ここで数える(T-064)。
+  it("焼いた埋め込みの形が本文と食い違わない", () => {
+    for (const e of manifest.editions) {
+      const path = join(DATA, `emb-${e.key}.bin`);
+      if (!existsSync(path)) continue; // モデルが手元に無ければ焼かれない
+      const bytes = readFileSync(path).length;
+      expect(bytes % (DIM * 4)).toBe(0);
+      expect(bytes / (DIM * 4)).toBe(e.sentences);
+    }
+  });
+
+  it("焼いた埋め込みが正規化されておらず、有限で、定数でない", () => {
+    for (const e of manifest.editions) {
+      const path = join(DATA, `emb-${e.key}.bin`);
+      if (!existsSync(path)) continue;
+      const buf = readFileSync(path);
+      const v = new Float32Array(
+        buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength),
+      );
+      let norm = 0;
+      for (let k = 0; k < DIM; k += 1) norm += v[k] * v[k];
+      norm = Math.sqrt(norm);
+      // **L2 正規化はモデルに入っていない。** 焼く側で勝手に正規化すると
+      // 1 に張り付き、公開面の cos の分母が意味を失う。
+      expect(Math.abs(norm - 1)).toBeGreaterThan(0.01);
+      expect(Number.isFinite(norm)).toBe(true);
+      // 全部同じ値なら「読めているが中身が壊れている」— 数えないと気づけない
+      const first = v[0];
+      expect(v.slice(0, 1000).some((x) => x !== first)).toBe(true);
     }
   });
 

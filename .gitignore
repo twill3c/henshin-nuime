@@ -16,7 +16,10 @@ data/nmt/*.npy
 data/nmt/model.pt
 data/nmt/vocab.json
 
-# 事前学習モデル(約 940 MB)。入手手順は README に書く
+# 事前学習モデル(約 1.06 GB)。入手手順は README に書く。
+# **量子化版(118 MB)も版に入れない** —— 公開面はこれを Hugging Face から
+# 直接落とす(N-03)。ここに置くのは局所で照合する(G-18)ためだけ。
+models/*/model_quantized.onnx
 models/*/model.onnx
 models/*/model.safetensors
 models/*/tokenizer.json

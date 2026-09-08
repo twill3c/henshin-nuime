@@ -317,6 +317,80 @@ a {
   border-left-color: var(--amber);
 }
 
+/* --- 自分の文を縫う --- */
+
+.bar {
+  margin-top: 10px;
+  height: 6px;
+  background: var(--bg-raised);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.bar span {
+  display: block;
+  height: 100%;
+  background: var(--amber);
+  transition: width 120ms linear;
+}
+
+.query {
+  flex: 1 1 320px;
+  min-width: 0;
+  background: var(--bg-panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  padding: 8px 12px;
+}
+
+.query:focus {
+  outline: none;
+  border-color: var(--amber-soft);
+}
+
+.hits {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin: 18px 0 30px;
+  align-items: start;
+}
+
+.hits h3 {
+  margin: 0 0 8px;
+  font-family: system-ui, sans-serif;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  color: var(--ink-quiet);
+}
+
+.hits .cell[data-edition="de"] h3 { color: var(--de); }
+.hits .cell[data-edition="en"] h3 { color: var(--en); }
+.hits .cell[data-edition="ja"] h3 { color: var(--ja); }
+
+.hits p {
+  margin: 0 0 10px;
+  font-size: 14px;
+}
+
+.score {
+  display: inline-block;
+  min-width: 3.4em;
+  margin-right: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: var(--amber);
+}
+
+@media (max-width: 900px) {
+  .hits {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* --- フッタ --- */
 
 .site-foot {

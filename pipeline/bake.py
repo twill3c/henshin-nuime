@@ -181,6 +181,35 @@ def _global_paragraphs(sents) -> list[int]:
     return out
 
 
+def bake_embeddings() -> dict[str, int]:
+    """焼いた埋め込みを float32 の生バイトで出す。
+
+    **JSON にしない。** 2,694 文 × 384 次元を文字にすると 20 MB を超えるが、
+    生の float32 なら 4.1 MB で済む。読む側は `Float32Array` に載せるだけでよい。
+
+    この 4.1 MB は**モデル(118 MB)を頼まれたときにだけ**取りに行くので、
+    既定の転送量には入らない(N-03)。
+    """
+    import numpy as np
+
+    from . import embed as embed_mod  # torch を引かないよう遅らせて読む
+
+    try:
+        vecs = embed_mod.load_cached()
+    except embed_mod.ModelMissing:
+        return {}
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    sizes: dict[str, int] = {}
+    for key, eid in EDITIONS:
+        v = np.asarray(vecs[eid], dtype=np.float32)
+        if v.ndim != 2 or v.shape[1] != 384:
+            raise BakeError(f"{eid} の埋め込みの形が {v.shape}")
+        path = OUT_DIR / f"emb-{key}.bin"
+        path.write_bytes(v.tobytes(order="C"))
+        sizes[path.name] = path.stat().st_size
+    return sizes
+
+
 def main() -> None:
     files = build()
     OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -191,6 +220,9 @@ def main() -> None:
         path.write_text(text, encoding="utf-8")
         total += len(text.encode("utf-8"))
         print(f"  {name}: {len(text.encode('utf-8'))/1024:.0f} KB")
+    for name, size in sorted(bake_embeddings().items()):
+        total += size
+        print(f"  {name}: {size/1024:.0f} KB(頼まれたときだけ配る)")
     print(f"合計 {total/1024:.0f} KB → {OUT_DIR}")
 
 
