@@ -16,6 +16,7 @@ import {
   type EditionText,
   type Links,
   type Manifest,
+  type Words,
 } from "../src/core/types";
 
 const DATA = join(process.cwd(), "public", "data");
@@ -198,6 +199,44 @@ maybe("焼いたデータの契約", () => {
       const first = v[0];
       expect(v.slice(0, 1000).some((x) => x !== first)).toBe(true);
     }
+  });
+
+  // 画面「一語の変身」が読むデータ(T-075)。
+  it("訳語の一覧が、登録簿と本文の両方と食い違わない", () => {
+    const path = join(DATA, "words.json");
+    if (!existsSync(path)) return; // 訳がまだ無ければ焼かれない
+    const words = read<Words>("words.json");
+    expect(words.terms.length).toBeGreaterThan(10);
+    for (const w of words.terms) {
+      // **訳語が文の配列に食われていないこと。** `ja` を訳語と文の両方に使って
+      // 実際に上書きした(焼く側で踏んだ)ので、こちら側でも数える。
+      expect(typeof w.term_ja).toBe("string");
+      expect(w.term_ja.length).toBeGreaterThan(0);
+      expect(Array.isArray(w.ja)).toBe(true);
+      // 初出は「章-段落」の形で、原文に実在する語であること
+      expect(w.first).toMatch(/^\d+-\d+$/);
+      expect(w.count).toBeGreaterThan(0);
+      // 独語の文には、その語が実際に含まれている(前方一致で見る)
+      expect(w.de.text.includes(w.term.slice(0, 4))).toBe(true);
+      // 相手の文の番号は、その版の範囲に収まる
+      const meta = (k: "en" | "ja") =>
+        manifest.editions.find((e) => e.key === k)!;
+      for (const s of w.en) expect(s.index).toBeLessThan(meta("en").sentences);
+      for (const s of w.ja) expect(s.index).toBeLessThan(meta("ja").sentences);
+    }
+  });
+
+  it("自前和訳の充填率が分子と分母で載っている", () => {
+    const own = manifest.own_translation;
+    const [done, total] = own.paragraphs;
+    expect(total).toBe(97); // 独語原文の段落数
+    expect(done).toBeGreaterThan(0);
+    expect(done).toBeLessThanOrEqual(total);
+    // 章ごとの分子の合計が全体の分子と一致する(片方だけ古びるのを防ぐ)
+    const sum = Object.values(own.by_chapter).reduce((a, v) => a + v[0], 0);
+    expect(sum).toBe(done);
+    const denom = Object.values(own.by_chapter).reduce((a, v) => a + v[1], 0);
+    expect(denom).toBe(total);
   });
 
   it("権利の表示義務が manifest に載っている", () => {

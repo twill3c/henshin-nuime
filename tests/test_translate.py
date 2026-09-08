@@ -138,6 +138,30 @@ def test_clock_idiom_is_matched_as_a_phrase(src):
     assert "六時半" in forms and "七時半" not in forms
 
 
+def test_halb_is_split_into_quantity_and_compound(src):
+    """**語頭の `halb-` は数量ではなく語構成要素**(`Halbschlaf` = まどろみ)。
+
+    ここで大事なのは、例外を一つ足したのではなく**数え切った**ことである。
+    本文の `halb` 系は 8 例しかなく、単独 5 / 合成 3 に割れる。
+    数え切ってあるので言い回しの表はこれ以上増えない ——
+    **開いた例外表と、閉じた列挙は別物**である。
+    """
+    import re
+    total = sum(len(re.findall(r"\b[Hh]alb\w*", s.text)) for s in src)
+    assert total == 8, total
+    picked: dict[str, int] = {}
+    for s in src:
+        for w, _ in translate.number_spans(s.text):
+            if "alb" in w:
+                picked[w] = picked.get(w, 0) + 1
+    assert sum(picked.values()) == total
+    assert picked["halb"] == 4          # 単独 5 のうち halb sieben を除いた 4
+    assert picked["halb sieben"] == 1
+    assert {"Halbschlaf", "halbverfault", "halblaut"} <= picked.keys()
+    # 合成語は「半」を要求しない形で登録されている
+    assert "まどろみ" in translate.IDIOMS["Halbschlaf"]
+
+
 def test_stem_collisions_are_excluded(src):
     """`achten`(注意する)は八ではない。`zweifeln`(疑う)は二ではない。
 

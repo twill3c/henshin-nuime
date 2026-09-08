@@ -64,6 +64,76 @@ def chapter_offsets(sents) -> list[int]:
     return offsets
 
 
+def _own_translation_stats(sents) -> dict:
+    """自前和訳の進み具合。**分子と分母で出す。**"""
+    from . import translate as tr
+
+    src = tr.load_source()
+    ja = tr.load_translation()
+    fill = tr.fill_rate(src, ja)
+    return {
+        "paragraphs": fill["paragraphs"],
+        "by_chapter": fill["by_chapter"],
+        "chars": fill["chars"],
+        "terms": len(tr.load_glossary()),
+    }
+
+
+def bake_words(sents, results) -> list[dict]:
+    """画面「一語の変身」の材料(F-10)。
+
+    登録簿の語ごとに、**その語が最初に現れる独語の文**と、そこから
+    **埋め込み由来の縫い目でたどった**英訳・原田訳の文、そして自前訳の段落を並べる。
+
+    **縫い目は説明ではなく、ここでも被験体である。** 訳語を比べるために縫い目を
+    使うので、縫い目が外れていれば並ぶ文も外れる。だから何本の対応をたどったかを
+    そのまま出す —— 0 本なら「引けなかった」と表示する。
+    """
+    from . import translate as tr
+
+    glossary = tr.load_glossary()
+    if not glossary:
+        return []
+    own = {(r.chapter, r.index): r.text for r in tr.load_translation()}
+    de = sents["de_pg22367"]
+    forward = {}
+    for pair_key, (a, b) in PAIRS:
+        rows = align.links(results[(a, b)]["embedding"]["beads"])
+        m: dict[int, list[int]] = {}
+        for i, j in rows:
+            m.setdefault(i, []).append(j)
+        forward[pair_key] = m
+
+    out: list[dict] = []
+    for term, entry in glossary.items():
+        pat = tr.term_pattern(term, entry)
+        hit = next((i for i, s in enumerate(de) if pat.search(s.text)), None)
+        if hit is None:
+            raise BakeError(f"登録語 {term} が独語本文に無い")
+        s = de[hit]
+        row = {
+            "term": term,
+            "kind": entry.get("kind", "term"),
+            # **`ja` という名前は使えない。** 相手の版の文を `en` / `ja` で持つので、
+            # 訳語を `ja` に入れると文の配列に上書きされて黙って消える(実際に踏んだ)。
+            "term_ja": entry["ja"],
+            "why": entry.get("why", ""),
+            "count": entry["count"],
+            "first": entry["first"],
+            "de": {"index": hit, "text": s.text},
+        }
+        for key, pair_key, eid in (("en", "de_en", "en_pg5200"),
+                                   ("ja", "de_ja", "ja_aozora49866")):
+            idx = forward[pair_key].get(hit, [])
+            row[key] = [{"index": j, "text": sents[eid][j].text} for j in idx]
+        text = own.get((s.chapter, s.paragraph))
+        row["own"] = {"paragraph": f"{s.chapter}-{s.paragraph}", "text": text}
+        if not isinstance(row.get("term_ja"), str) or not row["term_ja"]:
+            raise BakeError(f"{term}: 訳語が文の配列に食われている")
+        out.append(row)
+    return out
+
+
 def build() -> dict[str, object]:
     sents = sentences.load_all()
     results = evaluate.run()
@@ -101,6 +171,10 @@ def build() -> dict[str, object]:
     if attention is not None:
         files["attention.json"] = attention
 
+    words = bake_words(sents, results)
+    if words:
+        files["words.json"] = {"terms": words}
+
     files["manifest.json"] = {
         "has_attention": attention is not None,
         "chapters": sorted({s.chapter for s in sents[EDITIONS[0][1]]}),
@@ -108,6 +182,8 @@ def build() -> dict[str, object]:
         "pairs": [k for k, _ in PAIRS],
         # 章をまたぐ対応の件数は**手法ごとに**出す。一つにまとめない。
         "cross_chapter_links": cross,
+        # 自前和訳の充填率。**分子と分母で出す** —— 「何割」だけを書かない。
+        "own_translation": _own_translation_stats(sents),
         "editions": [
             {
                 "key": key,

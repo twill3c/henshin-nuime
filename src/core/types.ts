@@ -27,7 +27,37 @@ export type Manifest = {
   /** 章をまたぐ対応の件数。**手法ごとに出す** —— 一つにまとめない。 */
   cross_chapter_links: Record<PairKey, Record<MethodKey, number>>;
   editions: EditionMeta[];
+  /** 自前和訳の進み具合。**分子と分母で持つ** —— 「何割」だけを書かない。 */
+  own_translation: {
+    /** [訳した段落, 原文の段落] */
+    paragraphs: [number, number];
+    by_chapter: Record<string, [number, number]>;
+    chars: number;
+    terms: number;
+  };
 };
+
+/** 画面「一語の変身」が読むデータ。訳語登録簿の一語ぶん。 */
+export type WordRow = {
+  term: string;
+  kind: string;
+  /** この企画が当てた訳語。**`ja` という名前は使えない** —— 相手の版の文を
+   *  `ja` で持つので、同じ名前にすると焼く側で黙って上書きされる(実際に踏んだ)。 */
+  term_ja: string;
+  /** その訳語を選んだ理由。**登録簿に書いたものをそのまま出す。** */
+  why: string;
+  count: number;
+  /** 初出の段落("章-段落")。**手で書かず原文から生成した値。** */
+  first: string;
+  de: { index: number; text: string };
+  /** 埋め込み由来の縫い目でたどった相手の文。**空でありうる** —— 引けなければ空。 */
+  en: { index: number; text: string }[];
+  ja: { index: number; text: string }[];
+  /** 自前訳の段落。まだ訳していない章の語では `text` が null。 */
+  own: { paragraph: string; text: string | null };
+};
+
+export type Words = { terms: WordRow[] };
 
 export type EditionText = {
   id: string;

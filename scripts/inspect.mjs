@@ -275,6 +275,61 @@ async function main() {
         }
       }
 
+      // --- 一語の変身(F-10)---
+      //
+      // **開いた中身まで見る。** 一覧が出ているだけでは、四つの版が並んでいる
+      // ことにならない。開いて、独・英・原田訳・自前訳の四段が実際に文字を
+      // 持っているかを数える。
+      await page.goto(`${base}/kotoba/`, { waitUntil: "networkidle" });
+      try {
+        await page.waitForSelector(".word", { timeout: 20000 });
+      } catch {
+        const shown = await page.evaluate(() => document.body.innerText.slice(0, 120));
+        note(`/kotoba @${width}: 語が出ない。画面にあるのは「${shown.trim()}」`);
+      }
+      const words = await page.evaluate(() => {
+        const cards = [...document.querySelectorAll(".word")];
+        const body = document.querySelector(".word-body");
+        const rows = body ? [...body.querySelectorAll(".word-row")] : [];
+        return {
+          cards: cards.length,
+          openBodies: document.querySelectorAll(".word-body").length,
+          rows: rows.length,
+          filled: rows.filter(
+            (r) => (r.querySelector("p")?.textContent ?? "").trim().length > 4,
+          ).length,
+          heads: rows.map((r) => r.querySelector("h4")?.dataset.edition ?? ""),
+        };
+      });
+      if (words.cards < 20) note(`/kotoba @${width}: 語が ${words.cards} 個しか出ていない`);
+      if (words.openBodies !== 1) {
+        note(`/kotoba @${width}: 開いている語が ${words.openBodies} 個(1 個のはず)`);
+      }
+      if (words.rows !== 4) note(`/kotoba @${width}: 開いた中の段が ${words.rows} 本(4 本のはず)`);
+      if (words.filled !== 4) {
+        note(`/kotoba @${width}: 四段のうち中身があるのは ${words.filled} 段だけ`);
+      }
+      if (words.heads.join(",") !== "de,en,ja,own") {
+        note(`/kotoba @${width}: 段の並びが ${words.heads.join(",")}(de,en,ja,own のはず)`);
+      }
+      await measure(page, `/kotoba @${width}`);
+      // たたむ操作が効くか(属性ではなく、中身が消えるかで見る)。
+      //
+      // **押すのは「開いている札」の頭である。** 一度に開くのは一枚なので、
+      // 先頭の札を押すと別の札が開くだけで、中身は 1 個のまま残る ——
+      // それを「たためない」と読んで、検品器の側が誤って撃った(直した)。
+      await page.locator(".word:has(.word-body) .word-head").click();
+      await page.waitForTimeout(300);
+      const closed = await page.evaluate(
+        () => document.querySelectorAll(".word-body").length,
+      );
+      if (closed !== 0) note(`/kotoba @${width}: たたんでも中身が残る(${closed} 個)`);
+      if (shots) {
+        await page.goto(`${base}/kotoba/`, { waitUntil: "networkidle" });
+        await page.waitForSelector(".word-body");
+        await page.screenshot({ path: join(SHOTS, `kotoba-${width}.png`) });
+      }
+
       if (errors.length) note(`@${width}: ブラウザのエラー ${errors.length} 件: ${errors[0]}`);
       if (shots) {
         // 素の状態(既定の手法・何も選んでいない)を撮り直す。

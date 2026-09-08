@@ -45,12 +45,24 @@ GLOSSARY = TRANSLATION_DIR / "glossary.json"
 # 「七時十五分前」である。だから `halb` と `sieben` を別々に数えると、正しい訳文が
 # 落ちる。照合の単位は語ではなく**言い回し**でなければならない。
 # 長いものから先に当て、当たった範囲は短いほうに二重に数えさせない(最長一致)。
-CLOCK: dict[str, tuple[str, ...]] = {
+# 語ではなく**言い回し**で照合するもの。二種類ある。
+#
+#   時刻      独語は次の時を基準に言う(`halb sieben` = 六時半)
+#   合成語    数を表す語が語構成要素になっていて、日本語がその数を出さない
+#             (`Halbschlaf` = まどろみ)
+#
+# **これは開いた例外表ではない。** `halb*` は本文に 8 例しかなく、全部数えた ——
+# 単独 5 例(halb sieben / halb vorüber / halb unbewußt / halb fragend / halb erhob)は
+# 数量なのでそのまま照合し、合成語 3 例だけをここに置く。増えようがない(2026-09-08 実測)。
+IDIOMS: dict[str, tuple[str, ...]] = {
     "halb sieben": ("六時半", "六時三十分", "六時 30 分"),
     "einviertel acht": ("七時十五分", "七時 15 分"),
     "dreiviertel": ("四十五分", "十五分前", "45 分"),
     "viertelstund": ("十五分", "四半時", "15 分"),
     "viertelstünd": ("十五分", "四半時", "15 分"),
+    "Halbschlaf": ("まどろみ", "うたた寝", "半"),
+    "halbverfault": ("半ば腐", "腐りかけ", "半"),
+    "halblaut": ("小声", "半ば声", "低い声", "半"),
 }
 
 # **綴りが数と同じでも数でない語がある。** 数える前に外す。
@@ -69,6 +81,12 @@ NUMERALS: dict[str, tuple[str, ...]] = {
     "acht": ("八", "8", "や"),
     "neun": ("九", "9"),
     "zehn": ("十", "10"),
+    # **十代の数は語幹が変わる。** `sechzehn`/`siebzehn` に `sechs`/`sieben` は
+    # 含まれないので、語幹の前方一致では拾えない(実測 各 1 例・2026-09-08)。
+    # `vierzehn` は `vier` で拾えている —— 拾えるものと拾えないものが混ざるので、
+    # 「前方一致にしたから十代も見ている」とは言えない。
+    "sechzehn": ("十六", "16"),
+    "siebzehn": ("十七", "17"),
     "elf": ("十一", "11"),
     "zwölf": ("十二", "12"),
     "hundert": ("百", "100"),
@@ -193,7 +211,7 @@ def number_spans(text: str) -> list[tuple[str, tuple[str, ...]]]:
     """原文から数の言い回しを拾う。**最長一致** —— `halb sieben` を拾ったら、
     その範囲の `halb` と `sieben` は二重に数えない。
     """
-    entries = sorted({**CLOCK, **NUMERALS}.items(), key=lambda kv: -len(kv[0]))
+    entries = sorted({**IDIOMS, **NUMERALS}.items(), key=lambda kv: -len(kv[0]))
     taken: list[tuple[int, int]] = []
     found: list[tuple[str, tuple[str, ...]]] = []
     for word, forms in entries:
@@ -304,6 +322,37 @@ def check_registry_facts(src: list[Source],
     return errs
 
 
+def registry_coverage(src: list[Source], ja: list[Rendered],
+                      glossary: dict[str, dict]) -> dict[str, object]:
+    """**登録簿がどれだけ届いているかを数える**(HC-237)。
+
+    訳語の一貫性ゲートは、登録簿にある語しか見ない。だから「検査がある」ことと
+    「検査が届いている」ことは別で、後者は被覆でしか言えない ——
+    そして**被覆の穴はゲートの緑として現れる**ので、結果を見ていても気づけない。
+    実際 L11 は `Reisender` を登録しておらず、訳語が揺れたまま緑で出荷された。
+
+    ここでは訳した段落について「登録簿のいずれかの語に当たった段落の割合」を出す。
+    これは完全な物差しではない —— 語の総数ではなく段落を数えているし、
+    「登録すべき語をすべて登録したか」には答えない。**答えられないことは書かない。**
+    """
+    if not ja:
+        return {"paragraphs": [0, 0], "terms": len(glossary), "untouched": []}
+    by_key = {(s.chapter, s.index): s for s in src}
+    hit = 0
+    for r in ja:
+        s = by_key.get((r.chapter, r.index))
+        if s and any(term_pattern(t, e).search(s.text)
+                     for t, e in glossary.items()):
+            hit += 1
+    # 訳した範囲に一度も現れない登録語(まだ先の章にしか出ない語)
+    done = {(r.chapter, r.index) for r in ja}
+    untouched = [t for t, e in glossary.items()
+                 if not any(term_pattern(t, e).search(s.text)
+                            for s in src if (s.chapter, s.index) in done)]
+    return {"paragraphs": [hit, len(ja)], "terms": len(glossary),
+            "untouched": sorted(untouched)}
+
+
 def fill_rate(src: list[Source], ja: list[Rendered]) -> dict[str, object]:
     """**分子と分母で出す。** 「何割」だけを書かない。"""
     per_chapter: dict[int, list[int]] = {}
@@ -331,6 +380,7 @@ def run() -> dict[str, object]:
         "glossary_errors": check_glossary(src, ja, glossary),
         "length_outliers": check_lengths(src, ja),
         "registry_errors": check_registry_facts(src, glossary),
+        "coverage": registry_coverage(src, ja, glossary),
         "terms": len(glossary),
     }
 
@@ -342,6 +392,10 @@ def main(argv=None) -> int:
     print(f"自前和訳 {n}/{d} 段落({fill['chars']:,} 字)・登録簿 {r['terms']} 語")
     print("  章別(訳/原):", ", ".join(f"{k} 章 {v[0]}/{v[1]}"
                                        for k, v in fill["by_chapter"].items()))
+    cov = r["coverage"]
+    a, b = cov["paragraphs"]
+    print(f"  登録簿の被覆: 訳した段落のうち {a}/{b} に登録語が現れる"
+          f"(まだ出ていない登録語 {len(cov['untouched'])} 語)")
     bad = 0
     for key, label in (("paragraph_errors", "段落"), ("name_errors", "固有名"),
                        ("number_errors", "数"), ("glossary_errors", "訳語"),

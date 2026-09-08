@@ -391,6 +391,118 @@ a {
   }
 }
 
+/* --- 一語の変身 --- */
+
+.lead {
+  font-size: 15px;
+  line-height: 1.95;
+  margin: 18px 0 4px;
+}
+
+.words {
+  list-style: none;
+  margin: 18px 0 30px;
+  padding: 0;
+}
+
+.word {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+
+.word[data-kind="name"] { border-left: 3px solid var(--ja); }
+.word[data-kind="term"] { border-left: 3px solid var(--amber); }
+
+.word-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  background: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  flex-wrap: wrap;
+}
+
+.word-head:hover {
+  background: var(--bg-raised);
+}
+
+.word-de {
+  font-size: 16px;
+  color: var(--de);
+  letter-spacing: 0.02em;
+}
+
+.word-arrow {
+  color: var(--ink-quiet);
+  font-size: 12px;
+}
+
+.word-ja {
+  font-size: 16px;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.word-meta {
+  margin-left: auto;
+  font-family: system-ui, sans-serif;
+  font-size: 11px;
+  color: var(--ink-quiet);
+}
+
+.word-body {
+  border-top: 1px solid var(--line);
+  padding: 4px 14px 14px;
+}
+
+.word-why {
+  font-size: 13px;
+  line-height: 1.9;
+  color: var(--ink-dim);
+  margin: 12px 0 16px;
+  padding-left: 12px;
+  border-left: 2px solid var(--line);
+}
+
+.word-row {
+  margin: 0 0 14px;
+}
+
+.word-row h4 {
+  margin: 0 0 4px;
+  font-family: system-ui, sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  font-weight: 500;
+  color: var(--ink-quiet);
+}
+
+.word-row h4[data-edition="de"] { color: var(--de); }
+.word-row h4[data-edition="en"] { color: var(--en); }
+.word-row h4[data-edition="ja"] { color: var(--ja); }
+.word-row h4[data-edition="own"] { color: var(--thread); }
+
+.word-row p {
+  margin: 0 0 6px;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.word-row .empty {
+  color: var(--ink-quiet);
+  font-family: system-ui, sans-serif;
+  font-size: 12px;
+}
+
 /* --- フッタ --- */
 
 .site-foot {
