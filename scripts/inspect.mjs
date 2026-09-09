@@ -31,6 +31,17 @@ const MIME = {
   ".svg": "image/svg+xml",
 };
 
+/**
+ * 失敗したときに**本文**を出す。`document.body` の先頭を切ると、見出しと目次で
+ * 120 字が埋まって「画面に何が出ているか」が一字も見えない ——
+ * 実際にそれで、落ちた検査の原因が診断から読み取れなかった(L14)。
+ */
+function mainText() {
+  const el = document.querySelector("main");
+  const t = (el ?? document.body).innerText.replace(/\s+/g, " ").trim();
+  return t.slice(0, 160) || "(本文が空)";
+}
+
 function serve() {
   return new Promise((resolve) => {
     const server = createServer(async (req, res) => {
@@ -182,7 +193,7 @@ async function main() {
       try {
         await page.waitForSelector(".sentence", { timeout: 20000 });
       } catch {
-        const shown = await page.evaluate(() => document.body.innerText.slice(0, 120));
+        const shown = await page.evaluate(() => mainText());
         note(`/yomu @${width}: 文が出ない。画面にあるのは「${shown.trim()}」`);
         await page.close();
         continue;
@@ -257,7 +268,7 @@ async function main() {
         try {
           await page.waitForSelector(".figure svg .seam", { timeout: 20000 });
         } catch {
-          const shown = await page.evaluate(() => document.body.innerText.slice(0, 120));
+          const shown = await page.evaluate(() => mainText());
           note(`${path} @${width}: 図が出ない。画面にあるのは「${shown.trim()}」`);
           continue;
         }
@@ -284,7 +295,7 @@ async function main() {
       try {
         await page.waitForSelector(".word", { timeout: 20000 });
       } catch {
-        const shown = await page.evaluate(() => document.body.innerText.slice(0, 120));
+        const shown = await page.evaluate(() => mainText());
         note(`/kotoba @${width}: 語が出ない。画面にあるのは「${shown.trim()}」`);
       }
       const words = await page.evaluate(() => {
@@ -338,7 +349,7 @@ async function main() {
       try {
         await page.waitForSelector(".table-wrap table", { timeout: 20000 });
       } catch {
-        const shown = await page.evaluate(() => document.body.innerText.slice(0, 120));
+        const shown = await page.evaluate(() => mainText());
         note(`/zure @${width}: 表が出ない。画面にあるのは「${shown.trim()}」`);
       }
       const zure = await page.evaluate(() => {
@@ -368,6 +379,56 @@ async function main() {
       await measureFigures(page, `/zure @${width}`);
       if (shots) {
         await page.screenshot({ path: join(SHOTS, `zure-${width}.png`), fullPage: false });
+      }
+
+      // --- 歩き方 / 設計図(F-12)---
+      //
+      // **数字が焼いたデータから来ていることを確かめる。** この画面は
+      // 「同じ数を二箇所に書かない」ために焼いたデータを読む造りなので、
+      // 実際にその値が画面に出ているかを、データ側と突き合わせて見る。
+      // 出ていなければ「読めていないのに文章だけが立派」という状態になる。
+      await page.goto(`${base}/arukikata/`, { waitUntil: "networkidle" });
+      try {
+        await page.waitForSelector(".walk li", { timeout: 20000 });
+      } catch {
+        const shown = await page.evaluate(() => mainText());
+        note(`/arukikata @${width}: 中身が出ない。画面にあるのは「${shown.trim()}」`);
+      }
+      const walk = await page.evaluate(async () => {
+        const [manifest, zure, attention] = await Promise.all([
+          fetch("/data/manifest.json").then((r) => r.json()),
+          fetch("/data/zure.json").then((r) => r.json()),
+          fetch("/data/attention.json").then((r) => r.json()),
+        ]);
+        const text = document.body.innerText;
+        const own = manifest.own_translation;
+        const tr = zure.translators;
+        return {
+          items: document.querySelectorAll(".walk li").length,
+          sections: document.querySelectorAll("section").length,
+          verdicts: document.querySelectorAll(".verdict").length,
+          // 焼いた値が本文に現れているか(打ち直しでなく読み込みであることの確認)
+          shows: {
+            fill: text.includes(`${own.paragraphs[0]}/${own.paragraphs[1]} 段落`),
+            pValue: text.includes(attention.verdict.p_display),
+            longer: tr ? text.includes(`${tr.longer.harada} 段落で原田訳`) : true,
+            triangle: text.includes(zure.triangle.methods.diagonal.rate.toFixed(4)),
+          },
+          failedVerdict: document.querySelector('.verdict[data-passed="false"]') !== null,
+        };
+      });
+      if (walk.items < 10) note(`/arukikata @${width}: 箇条が ${walk.items} 個しかない`);
+      if (walk.sections < 6) note(`/arukikata @${width}: 節が ${walk.sections} 個しかない`);
+      for (const [k, ok] of Object.entries(walk.shows)) {
+        if (!ok) note(`/arukikata @${width}: 焼いた値 ${k} が画面に出ていない`);
+      }
+      // **落ちた判定が落ちたまま出ていること。** 目玉の不通過を隠していないかを見る
+      if (!walk.failedVerdict) {
+        note(`/arukikata @${width}: 不通過の判定が画面に出ていない`);
+      }
+      await measure(page, `/arukikata @${width}`);
+      if (shots) {
+        await page.screenshot({ path: join(SHOTS, `arukikata-${width}.png`) });
       }
 
       if (errors.length) note(`@${width}: ブラウザのエラー ${errors.length} 件: ${errors[0]}`);

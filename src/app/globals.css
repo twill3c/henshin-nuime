@@ -597,6 +597,42 @@ a {
   background: var(--bg-panel);
 }
 
+/* --- 歩き方 --- */
+
+.walk {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+}
+
+.walk li {
+  position: relative;
+  margin: 0 0 16px;
+  padding: 0 0 0 18px;
+  font-size: 14px;
+  line-height: 1.95;
+}
+
+.walk li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.85em;
+  width: 8px;
+  height: 1px;
+  background: var(--amber-soft);
+}
+
+.walk .note {
+  display: block;
+  margin-top: 4px;
+}
+
+.wrap section p {
+  font-size: 14px;
+  line-height: 1.95;
+}
+
 /* --- フッタ --- */
 
 .site-foot {

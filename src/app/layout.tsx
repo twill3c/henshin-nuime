@@ -29,6 +29,7 @@ export default function RootLayout({
               <Link href="/kotoba/">一語の変身</Link>
               <Link href="/zure/">ずれの図録</Link>
               <Link href="/nuu/">自分の文を縫う</Link>
+              <Link href="/arukikata/">歩き方</Link>
             </nav>
           </div>
         </header>

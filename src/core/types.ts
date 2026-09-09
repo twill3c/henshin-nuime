@@ -85,6 +85,8 @@ export type Zure = {
           coverage_dst: number;
         }
       >;
+      /** 置換検定の結果。**画面で数字を打ち直さない**ための焼き込み。 */
+      tests: Record<string, { difference: number; p: string }>;
     }
   >;
   triangle: {

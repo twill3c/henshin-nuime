@@ -98,6 +98,10 @@ def bake_zure(sents, results) -> dict:
             "common_src_sentences": row["common_src_sentences"],
             "common_dst_paragraphs": row["common_dst_paragraphs"],
             "methods": methods,
+            # 置換検定の結果もそのまま焼く。**画面で数字を打ち直さない** ——
+            # 同じ数を二箇所に書けば、必ず片方だけが古びる。
+            "tests": {k: {"difference": r.observed, "p": r.p_display}
+                      for k, r in row["tests"].items()},
         }
 
     tri = evaluate.triangle_verdict(results)
