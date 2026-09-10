@@ -116,6 +116,40 @@ export type Zure = {
     test: { difference: number; p: string };
     exact_head: { difference: number; p: string; n: number };
   };
+  /** 外挿検証(『審判』)。**英訳の本文は配らない**ので集計値だけ。 */
+  extrapolation?: {
+    work: string;
+    /** 英訳が公有でないこと。false のまま出す —— 隠すと前提が読めない。 */
+    english_is_public_domain: boolean;
+    structure: Record<
+      "de" | "en" | "ja",
+      {
+        paragraphs: number;
+        chapter_paragraphs: number[];
+        chars: number;
+        sentences: number;
+      }
+    >;
+    align: {
+      c: number;
+      chance: number;
+      n_src: number;
+      n_dst: number;
+      common_dst_paragraphs: number;
+      tests: Record<string, { difference: number; p: string }>;
+    } & Record<
+      MethodKey,
+      {
+        links: number;
+        refinement_violations: number;
+        refinement_paragraphs: number;
+        refinement_violations_common: number;
+        refinement_paragraphs_common: number;
+        coverage_src: number;
+        coverage_dst: number;
+      }
+    >;
+  };
 };
 
 export type EditionText = {

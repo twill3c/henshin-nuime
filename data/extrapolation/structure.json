@@ -1,0 +1,53 @@
+{
+ "de": {
+  "paragraphs": 140,
+  "chapter_paragraphs": [
+   20,
+   28,
+   11,
+   8,
+   3,
+   4,
+   28,
+   10,
+   18,
+   10
+  ],
+  "chars": 448436,
+  "sentences": 3047
+ },
+ "en": {
+  "paragraphs": 126,
+  "chapter_paragraphs": [
+   19,
+   26,
+   8,
+   7,
+   3,
+   3,
+   25,
+   9,
+   17,
+   9
+  ],
+  "chars": 448934,
+  "sentences": 3114
+ },
+ "ja": {
+  "paragraphs": 1503,
+  "chapter_paragraphs": [
+   253,
+   77,
+   170,
+   46,
+   42,
+   174,
+   263,
+   289,
+   111,
+   78
+  ],
+  "chars": 224825,
+  "sentences": 4961
+ }
+}

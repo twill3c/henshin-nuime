@@ -281,6 +281,121 @@ export default function Zure() {
         </p>
       </section>
 
+      {data.extrapolation && (
+        <section>
+          <h2>外挿検証 — 別の本でも同じことが言えるか</h2>
+          <p className="note">
+            同じ三者(カフカ / Wyllie 訳 / 原田義人訳)による
+            <strong>{data.extrapolation.work}</strong>で、同じ手続きを回した。
+            <strong>規則も閾値も当てはめ直していない</strong> ——
+            文分割の規則も長さモデルの分散も、『変身』で決めたまま使う。
+            当てはめ直せば外挿にならない。
+          </p>
+
+          {!data.extrapolation.english_is_public_domain && (
+            <p className="verdict">
+              <strong>英訳は公有ではないので、本文を一字も配らない。</strong>{" "}
+              『審判』の英訳(PG #7849)は冒頭に COPYRIGHTED と明記され、
+              著作権者の許諾で収録されている作品である。『変身』の英訳が公有だったので
+              同じだろうと想定していたが、<strong>権利は配布元ではなく作品ごとに決まる</strong>。
+              ここに出ているのは段落数などの集計値だけで、本文も埋め込みも配っていない。
+            </p>
+          )}
+
+          <div className="table-wrap">
+            <h3>構造(章題と後書きを外して数えた)</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>版</th><th>段落</th><th>文</th><th>本文字数</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(["de", "en", "ja"] as const).map((k) => {
+                  const s = data.extrapolation!.structure[k];
+                  return (
+                    <tr key={k}>
+                      <th scope="row">
+                        {k === "de" ? "独語原文" : k === "en" ? "英訳(本文は配らない)" : "和訳 原田義人"}
+                      </th>
+                      <td>{s.paragraphs.toLocaleString()}</td>
+                      <td>{s.sentences.toLocaleString()}</td>
+                      <td>{s.chars.toLocaleString()}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <p className="verdict">
+            <strong>
+              『変身』で背骨だったオラクルが、別の本では成り立たない。
+            </strong>{" "}
+            独 {data.extrapolation.structure.de.paragraphs} 段落に対し英{" "}
+            {data.extrapolation.structure.en.paragraphs} 段落 ——
+            『変身』では 97 対 97 で総数も章別も完全に一致し、
+            「段落一致率」という物差しはその一致の上に立っていた。
+            『審判』ではその物差しが<strong>そもそも定義できない</strong>。
+            使えるのは「英の段落は独の段落の粗視化である」という弱い述語で、
+            これは『変身』の日本語で使った述語と<strong>向きが逆</strong>である。
+            <br />
+            <span className="note">
+              機構は分けていない —— 訳者が併合したのか、Wyllie の底本がこの 1925 年版と
+              違ったのか、この数字は答えない。
+            </span>
+          </p>
+
+          <div className="table-wrap">
+            <h3>
+              縫い目そのもの(独 → 日・共通部分{" "}
+              {data.extrapolation.align.common_dst_paragraphs.toLocaleString()} 段落)
+            </h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>手法</th><th>対応</th><th>細分の破れ</th>
+                  <th>同・共通部分</th><th>被覆(原文/訳)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(["embedding", "gale_church", "diagonal"] as const).map((m) => {
+                  const e = data.extrapolation!.align[m];
+                  return (
+                    <tr key={m}>
+                      <th scope="row">{METHOD_LABEL[m]}</th>
+                      <td>{e.links.toLocaleString()}</td>
+                      <td>{e.refinement_violations}/{e.refinement_paragraphs}</td>
+                      <td>{e.refinement_violations_common}/{e.refinement_paragraphs_common}</td>
+                      <td>{pct(e.coverage_src)} / {pct(e.coverage_dst)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <p className="verdict" data-passed="true">
+            <strong>手法についての結論は外挿した。</strong> 埋め込みは長さモデルを +
+            {data.extrapolation.align.tests.refinement_vs_gale_church_block1?.difference.toFixed(4)}
+            (p {data.extrapolation.align.tests.refinement_vs_gale_church_block1?.p})、
+            対角線を +
+            {data.extrapolation.align.tests.refinement_vs_diagonal_block1?.difference.toFixed(4)}
+            (p {data.extrapolation.align.tests.refinement_vs_diagonal_block1?.p})上回る
+            —— ブロック幅 1 / 5 / 10 のすべてで同じ向き。
+            <br />
+            <span className="note">
+              <strong>ただし物差しの厳しさは作品で変わる。</strong>
+              対照の破れ率は『変身』の 34% から 5〜6% に落ちている。
+              手法が良くなったのではない ——『審判』は日本語の段落が独語の 10.7 倍に
+              細分されており(『変身』は 1.70 倍)、一段落あたりの文が少ないぶん
+              またぐ機会そのものが減る。<strong>二つの本の数字を直接比べてはいけない。</strong>
+              読めるのは、それぞれの本の中での対照との差だけである。
+            </span>
+          </p>
+        </section>
+      )}
+
       <section>
         <h2>三角整合 — 正解ラベルを使わない物差し</h2>
         <p className="note">

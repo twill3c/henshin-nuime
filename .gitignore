@@ -4,6 +4,16 @@ __pycache__/
 .venv/
 venv/
 
+# **公有でない原本は版に入れない**(HC-255)。
+# 『審判』の英訳 PG #7849 は冒頭に COPYRIGHTED と明記され、著作権者の許諾で
+# PG に収録されている作品である。版に入れれば再配布になる。
+# 手元での計測(著作権法 30 条の 4)にだけ使い、入手手順は README に書く。
+# 独 PG #69327 と青空 49863 は公有なので、他の原本と同じく版に残す。
+data/raw/en_pg7849.txt
+
+# 外挿検証の埋め込み(約 12 MB)。`python -m pipeline.extrapolate` で作り直せる
+data/extrapolation/*.npy
+
 # 生成物 — data/raw から pipeline/ で作り直せる
 data/editions/
 data/sentences/

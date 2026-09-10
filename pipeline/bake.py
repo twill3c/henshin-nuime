@@ -121,6 +121,19 @@ def bake_zure(sents, results) -> dict:
     zs = evaluate.translator_lengths(results)
     if zs:
         out["translators"] = zs
+
+    # 外挿検証(F-14 / G-09)。**英訳の本文は一字も配らない**(HC-255)ので、
+    # ここに載るのは段落数などの集計値だけである。
+    ex_dir = Path(__file__).resolve().parent.parent / "data" / "extrapolation"
+    ex: dict[str, object] = {}
+    for name in ("structure", "align"):
+        path = ex_dir / f"{name}.json"
+        if path.exists():
+            ex[name] = json.loads(path.read_text(encoding="utf-8"))
+    if len(ex) == 2:
+        ex["work"] = "Der Prozess / 審判"
+        ex["english_is_public_domain"] = False
+        out["extrapolation"] = ex
     return out
 
 

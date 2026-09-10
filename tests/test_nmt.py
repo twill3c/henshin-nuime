@@ -16,6 +16,20 @@ import numpy as np
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
+
+
+def _section(doc: str, heading: str) -> str:
+    """見出しから次の同じ深さの見出しまでを切り出す。
+
+    **文書の表は節で特定する。** 先頭の列見出しだけで探すと、
+    あとから同じ列を持つ表が増えたときに別の表を読む(HC-220)。
+    """
+    start = doc.find(heading)
+    assert start >= 0, f"{heading} が見つからない"
+    depth = heading.split(" ")[0]
+    rest = doc[start + len(heading):]
+    end = rest.find("\n" + depth + " ")
+    return rest if end < 0 else rest[:end]
 sys.path.insert(0, str(ROOT))
 
 from pipeline import nmt  # noqa: E402
@@ -249,9 +263,14 @@ def test_t053_headline_verdict_matches_spec():
     v = evaluate.attention_verdict()
     spec = (ROOT / "SPEC.md").read_text(encoding="utf-8")
 
+    # **表は節見出しで特定する。** 先頭の列見出しだけで探すと、あとから
+    # 同じ列を持つ表が増えたときに別の表を読む —— L15 で実際に起きた
+    # (外挿検証の §3.16 に「手法 | 対応 | …」の表を足したら、この検査が
+    # そちらを目玉の判定表として拾った)。HC-220 の改訂どおり、節で挟む。
+    section = _section(spec, "### 3.7")
     rows = []
     in_table = False
-    for line in spec.splitlines():
+    for line in section.splitlines():
         if not line.startswith("|"):
             in_table = False
             continue
