@@ -2,6 +2,17 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import "./globals.css";
 
+/** フリート共通フッタの行き先。**推測で書かない** ——
+ *  App Menu は app-menu-amber(app-menu.vercel.app は別人のアプリ)。
+ *  歩き方と設計図は発行した解説アーティファクトの URL をそのまま使う。 */
+const FLEET = {
+  license: "https://github.com/twill3c/henshin-nuime/blob/main/LICENSE",
+  repository: "https://github.com/twill3c/henshin-nuime",
+  arukikata: "https://claude.ai/artifact/EhEzMVV4AGXbp9hF84Ljg8",
+  sekkeizu: "https://claude.ai/artifact/UTqki4rHzeUhVFoE6VbG2x",
+  appMenu: "https://app-menu-amber.vercel.app/",
+} as const;
+
 export const metadata: Metadata = {
   title: "変身の縫い目",
   description:
@@ -61,6 +72,22 @@ export default function RootLayout({
             </ul>
           </div>
         </footer>
+        {/* fleet: fixed footer —— フリート共通規約(koho-lens が正本)。
+            5 項目・この並び・下部固定。区切りの「・」は文字として置く(CSS で描くと innerText に出ない)。
+            © はリンク文言の外、MIT License より後・GitHub より前。
+            上の出典表示とは別物なので混ぜない。 */}
+        <nav className="fleet" aria-label="フリート共通リンク">
+          <a href={FLEET.license} target="_blank" rel="noopener">MIT License</a>
+          <span className="fleet__copy"> © 2026 坂田哲朗</span>
+          <span className="fsep">・</span>
+          <a href={FLEET.repository} target="_blank" rel="noopener">GitHub</a>
+          <span className="fsep">・</span>
+          <a href={FLEET.arukikata} target="_blank" rel="noopener">変身の縫い目の歩き方</a>
+          <span className="fsep">・</span>
+          <a href={FLEET.sekkeizu} target="_blank" rel="noopener">変身の縫い目 設計図</a>
+          <span className="fsep">・</span>
+          <a href={FLEET.appMenu} target="_blank" rel="noopener">App Menu</a>
+        </nav>
       </body>
     </html>
   );

@@ -431,6 +431,49 @@ async function main() {
         await page.screenshot({ path: join(SHOTS, `arukikata-${width}.png`) });
       }
 
+      // --- フリート共通フッタ ---
+      //
+      // **要素名で探さず、中身(MIT License と App Menu)で選ぶ。** 並び・区切り 4 個・
+      // 行き先・下部固定、そして**フッタの実高 < 本文の逃げ**を幅ごとに測る ——
+      // 折り返すと高くなるので、一つの幅で決めた逃げは狭い幅で本文を隠す。
+      // 最後に逃げを 0 にした状態で同じ検査が撃つことを確かめる(陽性対照)。
+      await page.goto(`${base}/`, { waitUntil: "networkidle" });
+      const fleetCheck = () => {
+        const nav = [...document.querySelectorAll("nav, footer")].find(
+          (el) => el.innerText.includes("MIT License") && el.innerText.includes("App Menu"),
+        );
+        if (!nav) return ["共通フッタが見つからない"];
+        const out = [];
+        const t = nav.innerText;
+        const order = ["MIT License", "© 2026 坂田哲朗", "GitHub", "歩き方", "設計図", "App Menu"];
+        const pos = order.map((w) => t.indexOf(w));
+        if (pos.some((p) => p < 0)) out.push(`項目が欠けている: ${order.filter((_, i) => pos[i] < 0).join(" / ")}`);
+        else if (pos.some((p, i) => i > 0 && p < pos[i - 1])) out.push(`並びが違う: ${t}`);
+        const seps = (t.match(/・/g) || []).length;
+        if (seps !== 4) out.push(`区切りの「・」が ${seps} 個(4 個のはず)`);
+        const href = (label) => [...nav.querySelectorAll("a")].find((a) => a.textContent.trim() === label)?.href ?? "";
+        if (!/^https:\/\/github\.com\/twill3c\/henshin-nuime\/blob\/[^/]+\/LICENSE$/.test(href("MIT License"))) out.push(`MIT License の行き先: ${href("MIT License")}`);
+        if (href("GitHub") !== "https://github.com/twill3c/henshin-nuime") out.push(`GitHub の行き先: ${href("GitHub")}`);
+        if (href("App Menu") !== "https://app-menu-amber.vercel.app/") out.push(`App Menu の行き先: ${href("App Menu")}`);
+        if ([...nav.querySelectorAll("a")].some((a) => a.textContent.includes("©"))) out.push("© がリンク文言の中にある");
+        const cs = getComputedStyle(nav);
+        if (cs.position !== "fixed" || cs.bottom !== "0px") out.push(`下部固定でない(${cs.position} / bottom ${cs.bottom})`);
+        const h = nav.getBoundingClientRect().height;
+        const pad = parseFloat(getComputedStyle(document.body).paddingBottom);
+        if (!(h < pad)) out.push(`フッタの実高 ${h.toFixed(0)}px が逃げ ${pad.toFixed(0)}px 以上 —— 本文の末尾が隠れる`);
+        return out;
+      };
+      for (const m of await page.evaluate(fleetCheck)) note(`共通フッタ @${width}: ${m}`);
+      const control = await page.evaluate((src) => {
+        document.body.style.paddingBottom = "0px";
+        const r = new Function(`return (${src})()`)();
+        document.body.style.paddingBottom = "";
+        return r;
+      }, fleetCheck.toString());
+      if (!control.some((m) => m.includes("逃げ"))) {
+        note(`共通フッタ @${width}: 陽性対照が撃たない —— 逃げを 0 にしても検査が黙った`);
+      }
+
       if (errors.length) note(`@${width}: ブラウザのエラー ${errors.length} 件: ${errors[0]}`);
       if (shots) {
         // 素の状態(既定の手法・何も選んでいない)を撮り直す。

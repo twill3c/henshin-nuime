@@ -633,6 +633,37 @@ a {
   line-height: 1.95;
 }
 
+/* fleet: fixed footer —— フリート共通規約(koho-lens が正本)。
+   5 項目・この並び・下部固定。固定するぶん body に逃げを作らないと本文の末尾が隠れる。
+   逃げの厚さは幅ごとにフッタの実高を測って決める(折り返すと高くなる)。 */
+nav.fleet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 40;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: baseline;
+  gap: 0 2px;
+  padding: 8px 16px 9px;
+  background: var(--bg-raised);
+  border-top: 1px solid var(--line);
+  font-family: system-ui, sans-serif;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--ink-quiet);
+}
+nav.fleet a { color: var(--amber); text-decoration: none; }
+nav.fleet a:hover, nav.fleet a:focus-visible { text-decoration: underline; }
+nav.fleet .fsep { padding: 0 6px; opacity: 0.55; user-select: none; }
+nav.fleet .fleet__copy { color: var(--ink-quiet); }
+
+body { padding-bottom: 3.4rem; }
+@media (max-width: 46rem) { body { padding-bottom: 4.8rem; } }
+@media (max-width: 30rem) { body { padding-bottom: 6.2rem; } }
+
 /* --- フッタ --- */
 
 .site-foot {
