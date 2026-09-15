@@ -4,6 +4,9 @@
 (縫い目)を教師なしで引かせ、その縫い目を測る**解剖台。深層学習の実装訓練を兼ねる。
 
 **本番: https://henshin-nuime.vercel.app**(静的書き出しのみ・サーバ関数も cron も DB も無い)
+/ **GitHub: https://github.com/twill3c/henshin-nuime**
+/ 解説: [変身の縫い目の歩き方](https://claude.ai/artifact/EhEzMVV4AGXbp9hF84Ljg8)・[変身の縫い目 設計図](https://claude.ai/artifact/UTqki4rHzeUhVFoE6VbG2x)
+/ [App Menu](https://app-menu-amber.vercel.app/) に掲載
 
 設計と品質ゲートは [SPEC.md](SPEC.md)、検査は [TEST_SPEC.md](TEST_SPEC.md) を見ること。
 
